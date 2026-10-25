@@ -75,7 +75,8 @@
 
   // Divide una zona in due: la prima parte è la zona originale, la seconda è una copia
   // con le stesse impostazioni, così il foglio non cambia aspetto finché non lo modifichi.
-  function dividiZona(stato, idZona, direzione) {
+  // "posizione" (facoltativa): {valore, unita} della nuova linea; senza, la linea parte al 50%.
+  function dividiZona(stato, idZona, direzione, posizione) {
     const zona = trovaNodo(stato.layout, idZona);
     if (!zona || zona.tipo !== 'zona') return null;
     const copia = {
@@ -88,6 +89,9 @@
       M.divisionePredefinita(direzione),
       { a: zona, b: copia }
     );
+    if (posizione && Number.isFinite(posizione.valore) && (posizione.unita === 'mm' || posizione.unita === '%')) {
+      divisione.posizione = { valore: posizione.valore, unita: posizione.unita };
+    }
     sostituisci(stato, idZona, divisione);
     return { divisione, zonaNuova: copia };
   }

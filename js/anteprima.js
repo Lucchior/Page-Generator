@@ -63,19 +63,21 @@
   // Livello interattivo sopra il foglio: serve solo a scegliere zone e divisioni con il mouse
   // o il tocco, evidenzia la selezione e mostra i numeri delle zone. Non finisce nel PDF.
   // Con una sola zona non c'è nulla da scegliere e il livello non viene disegnato.
-  function evidenzia(contenitore, foglio, selezione) {
+  function evidenzia(contenitore, foglio, selezione, opzioni) {
     const svg = contenitore.firstElementChild;
     if (!svg || !foglio || foglio.errore) return;
     const vecchio = svg.querySelector('.sovrapposizione');
     if (vecchio) vecchio.remove();
-    if (!foglio.zone || foglio.zone.length < 2) return;
+    const dividi = !!(opzioni && opzioni.dividi);
+    const molte = foglio.zone && foglio.zone.length > 1;
+    if (!foglio.zone || (!molte && !dividi)) return;
 
     const g = nodo('g', { class: 'sovrapposizione', 'aria-hidden': 'true' });
     const rettangolo = (r, attributi) =>
       nodo('rect', Object.assign({ x: n(r.x), y: n(r.y), width: n(r.w), height: n(r.h) }, attributi));
 
     for (const z of foglio.zone) {
-      const scelta = selezione && selezione.tipo === 'zona' && selezione.id === z.id;
+      const scelta = molte && selezione && selezione.tipo === 'zona' && selezione.id === z.id;
       g.appendChild(rettangolo(z.rettangolo, { class: 'area-zona' + (scelta ? ' scelta' : ''), 'data-nodo': z.id }));
     }
     for (const d of foglio.divisioni) {
@@ -88,7 +90,9 @@
         }));
       }
     }
-    for (const z of foglio.zone) {
+    // Guida della linea che verrebbe creata cliccando (modo «Dividi con il clic»).
+    if (dividi) g.appendChild(nodo('line', { class: 'guida-taglio', x1: 0, y1: 0, x2: 0, y2: 0, visibility: 'hidden' }));
+    for (const z of molte ? foglio.zone : []) {
       const r = z.rettangolo;
       const lato = Math.min(r.w, r.h);
       if (lato < 6) continue;
@@ -102,9 +106,33 @@
     svg.appendChild(g);
   }
 
-  function mostra(contenitore, foglio, selezione) {
+  function mostra(contenitore, foglio, selezione, opzioni) {
     contenitore.replaceChildren(creaSvg(foglio));
-    evidenzia(contenitore, foglio, selezione);
+    evidenzia(contenitore, foglio, selezione, opzioni);
+  }
+
+  // Da coordinate dello schermo a millimetri sul foglio (origine in alto a sinistra).
+  function punto(contenitore, foglio, clientX, clientY) {
+    const svg = contenitore.firstElementChild;
+    if (!svg || !foglio) return null;
+    const r = svg.getBoundingClientRect();
+    if (r.width < 1 || r.height < 1) return null;
+    return { x: ((clientX - r.left) / r.width) * foglio.larghezza, y: ((clientY - r.top) / r.height) * foglio.altezza };
+  }
+
+  // Mostra la guida su un segmento [x1,y1,x2,y2] in mm, oppure la nasconde (null).
+  function guida(contenitore, segmento) {
+    const l = contenitore.querySelector('.guida-taglio');
+    if (!l) return;
+    if (!segmento) {
+      l.setAttribute('visibility', 'hidden');
+      return;
+    }
+    l.setAttribute('x1', n(segmento[0]));
+    l.setAttribute('y1', n(segmento[1]));
+    l.setAttribute('x2', n(segmento[2]));
+    l.setAttribute('y2', n(segmento[3]));
+    l.setAttribute('visibility', 'visible');
   }
 
   // Ridimensiona l'SVG in modo che il foglio stia per intero nello spazio disponibile.
@@ -119,5 +147,5 @@
     svg.style.height = Math.floor(foglio.altezza * scala) + 'px';
   }
 
-  Fogli.anteprima = { mostra, adatta, creaSvg, evidenzia };
+  Fogli.anteprima = { mostra, adatta, creaSvg, evidenzia, punto, guida };
 })(typeof window !== 'undefined' ? window : globalThis);

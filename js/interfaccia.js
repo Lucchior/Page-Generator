@@ -7,7 +7,7 @@
   'use strict';
 
   const F = window.Fogli;
-  if (!F || !F.modello || !F.layout || !F.geometria || !F.anteprima || !F.pdf) {
+  if (!F || !F.modello || !F.layout || !F.geometria || !F.anteprima || !F.pdf || !F.preset) {
     document.body.textContent = 'Errore: alcuni file del programma non sono stati caricati. Controlla la cartella js/ e ricarica la pagina.';
     return;
   }
@@ -16,6 +16,7 @@
   const G = F.geometria;
   const A = F.anteprima;
   const P = F.pdf;
+  const PR = F.preset;
 
   const stato = M.creaStatoIniziale();
   const sezioni = [];
@@ -25,6 +26,15 @@
   // Selezione corrente: una zona (le cui impostazioni sono in modifica) o una divisione.
   let selezione = { tipo: 'zona', id: 'z1' };
   let ultimaZonaId = 'z1';
+  // Modalità «Dividi con il clic»: il clic sull'anteprima divide una zona o toglie una linea.
+  let modoDividi = false;
+  let direzioneClic = 'verticale';
+
+  // Archivio nel browser: se localStorage non è accessibile le operazioni falliscono con un messaggio.
+  let memoria = null;
+  try { memoria = window.localStorage; } catch (e) { memoria = null; }
+  const archivio = PR.creaArchivio(memoria || {});
+  let timerSalvataggio = 0;
 
   const pannello = document.getElementById('pannello');
   const contenitoreSezioni = document.getElementById('sezioni');
@@ -34,6 +44,8 @@
   const avvisiEl = document.getElementById('avvisi');
   const annunciEl = document.getElementById('annunci');
   const scaricaEl = document.getElementById('scarica');
+  const strumentiEl = document.getElementById('strumenti');
+  const temaEl = document.getElementById('tema');
 
   // ------------------------------------------------------------ utilità
 
@@ -466,7 +478,7 @@
     selezione = nuova;
     if (nuova.tipo === 'zona') ultimaZonaId = nuova.id;
     aggiornaControlli();
-    if (ultimo && !ultimo.errore) A.evidenzia(foglioEl, ultimo, selezione);
+    if (ultimo && !ultimo.errore) A.evidenzia(foglioEl, ultimo, selezione, { dividi: modoDividi });
   }
 
   function dividi(direzione) {
@@ -727,6 +739,17 @@
   function cambiato() {
     aggiornaControlli();
     pianificaRigenerazione();
+    pianificaSalvataggio();
+  }
+
+  // L'ultima configurazione si salva poco dopo l'ultima modifica (e quando si chiude la pagina).
+  function pianificaSalvataggio() {
+    window.clearTimeout(timerSalvataggio);
+    timerSalvataggio = window.setTimeout(salvaSubito, 500);
+  }
+  function salvaSubito() {
+    window.clearTimeout(timerSalvataggio);
+    archivio.salvaUltima(stato);
   }
 
   function pianificaRigenerazione() {
@@ -778,7 +801,7 @@
     foglioEl.classList.remove('obsoleto');
     scaricaEl.disabled = false;
 
-    A.mostra(foglioEl, foglio, selezione);
+    A.mostra(foglioEl, foglio, selezione, { dividi: modoDividi });
     for (const s of sezioni) for (const c of s.controlli) if (c.dettagli) c.dettagli(foglio);
     A.adatta(pianoEl, foglioEl, foglio);
     foglioEl.setAttribute('aria-label', 'Anteprima del foglio: ' + nomeFormato() + ', ' + descrizioneMotivo(foglio));
@@ -807,14 +830,79 @@
   pannello.addEventListener('submit', (e) => e.preventDefault());
 
   // Clic o tocco sull'anteprima: sceglie la zona o la divisione sotto il puntatore.
-  foglioEl.addEventListener('click', (e) => {
+  function nodoSotto(e) {
     const bersaglio = e.target instanceof Element ? e.target.closest('[data-nodo]') : null;
-    if (!bersaglio) return;
+    if (!bersaglio) return null;
     const id = bersaglio.getAttribute('data-nodo');
-    if (!/^[zd]\d+$/.test(id)) return;
-    const n = L.trovaNodo(stato.layout, id);
+    if (!/^[zd]\d+$/.test(id)) return null;
+    return L.trovaNodo(stato.layout, id);
+  }
+
+  // Posizione (in mm dal bordo della zona) e segmento della linea che nascerebbe cliccando qui.
+  function taglioPrevisto(zonaId, e) {
+    if (!ultimo || ultimo.errore) return null;
+    const z = ultimo.zone.find((x) => x.id === zonaId);
+    const pt = A.punto(foglioEl, ultimo, e.clientX, e.clientY);
+    if (!z || !pt) return null;
+    const r = z.rettangolo;
+    const verticale = direzioneClic === 'verticale';
+    const lunghezza = verticale ? r.w : r.h;
+    const minimo = M.MIN_ZONA + M.divisionePredefinita(direzioneClic).spazio / 2;
+    if (lunghezza < 2 * minimo) return { troppoPiccola: true };
+    const grezzo = verticale ? pt.x - r.x : pt.y - r.y;
+    const valore = Math.round(Math.min(lunghezza - minimo, Math.max(minimo, grezzo)) * 10) / 10;
+    const segmento = verticale
+      ? [r.x + valore, r.y, r.x + valore, r.y + r.h]
+      : [r.x, r.y + valore, r.x + r.w, r.y + valore];
+    return { valore, segmento };
+  }
+
+  foglioEl.addEventListener('click', (e) => {
+    const n = nodoSotto(e);
     if (!n) return;
-    cambiaSelezione({ tipo: n.tipo, id: n.id });
+    if (!modoDividi) {
+      cambiaSelezione({ tipo: n.tipo, id: n.id });
+      return;
+    }
+    if (n.tipo === 'divisione') {
+      const prima = M.contaZone(stato.layout);
+      const zona = L.unisciDivisione(stato, n.id);
+      if (!zona) return;
+      selezione = { tipo: 'zona', id: zona.id };
+      ultimaZonaId = zona.id;
+      annuncia('Linea tolta: zone da ' + prima + ' a ' + M.contaZone(stato.layout) + '.');
+    } else {
+      const t = taglioPrevisto(n.id, e);
+      if (!t) return;
+      if (t.troppoPiccola) {
+        annuncia('Questa zona è troppo piccola per essere divisa.');
+        return;
+      }
+      const r = L.dividiZona(stato, n.id, direzioneClic, { valore: t.valore, unita: 'mm' });
+      if (!r) return;
+      ultimaZonaId = n.id;
+      selezione = { tipo: 'divisione', id: r.divisione.id };
+      annuncia('Zona divisa a ' + M.formattaIt(t.valore) + ' mm: ora ci sono ' + M.contaZone(stato.layout) + ' zone.');
+    }
+    A.guida(foglioEl, null);
+    cambiato();
+  });
+
+  // Guida che segue il puntatore: mostra dove cadrebbe la linea (o segnala che un clic la toglie).
+  foglioEl.addEventListener('pointermove', (e) => {
+    if (!modoDividi) return;
+    const n = nodoSotto(e);
+    foglioEl.classList.toggle('su-linea', !!n && n.tipo === 'divisione');
+    if (!n || n.tipo !== 'zona') {
+      A.guida(foglioEl, null);
+      return;
+    }
+    const t = taglioPrevisto(n.id, e);
+    A.guida(foglioEl, t && t.segmento ? t.segmento : null);
+  });
+  foglioEl.addEventListener('pointerleave', () => {
+    A.guida(foglioEl, null);
+    foglioEl.classList.remove('su-linea');
   });
 
   if (typeof window.ResizeObserver === 'function') {
@@ -825,6 +913,307 @@
     window.addEventListener('resize', () => {
       if (ultimo && !ultimo.errore) A.adatta(pianoEl, foglioEl, ultimo);
     });
+  }
+
+  // ------------------------------------------------------------ gruppi a scelta singola extra (tema, direzione)
+
+  function gruppoRadio(etichetta, opzioni, iniziale, alCambio, classe) {
+    const id = prossimoId();
+    const nodo = el('div', 'campo-compatto');
+    const titolo = el('span', 'visivamente-nascosto', etichetta);
+    titolo.id = id + '-etichetta';
+    const gruppo = el('div', 'segmenti compatto' + (classe ? ' ' + classe : ''));
+    gruppo.setAttribute('role', 'radiogroup');
+    gruppo.setAttribute('aria-labelledby', titolo.id);
+    const ingressi = [];
+    for (const [v, testoOpzione] of opzioni) {
+      const lab = el('label');
+      const inp = el('input');
+      inp.type = 'radio';
+      inp.name = id;
+      inp.value = v;
+      inp.checked = v === iniziale;
+      lab.append(inp, el('span', 'opzione', testoOpzione));
+      gruppo.appendChild(lab);
+      ingressi.push(inp);
+      inp.addEventListener('change', () => { if (inp.checked) alCambio(v); });
+    }
+    nodo.append(titolo, gruppo);
+    return { nodo, imposta(v) { for (const i of ingressi) i.checked = i.value === v; } };
+  }
+
+  // ------------------------------------------------------------ tema chiaro/scuro
+
+  if (F.tema && temaEl) {
+    temaEl.appendChild(el('span', 'tema-etichetta', 'Tema'));
+    temaEl.appendChild(gruppoRadio(
+      'Tema dell’interfaccia',
+      [['auto', 'Automatico'], ['chiaro', 'Chiaro'], ['scuro', 'Scuro']],
+      F.tema.leggi(),
+      (v) => { F.tema.imposta(v); annuncia('Tema: ' + ({ auto: 'automatico, segue il sistema', chiaro: 'chiaro', scuro: 'scuro' })[v] + '.'); }
+    ).nodo);
+  }
+
+  // ------------------------------------------------------------ modalità «Dividi con il clic»
+
+  function creaStrumenti() {
+    const riga = el('div', 'strumenti-riga');
+    const lab = el('label', 'casella');
+    const casella = el('input');
+    casella.type = 'checkbox';
+    casella.id = prossimoId();
+    lab.append(casella, el('span', null, 'Dividi con il clic'));
+    riga.appendChild(lab);
+
+    const direzione = gruppoRadio(
+      'Direzione della linea da creare',
+      [['verticale', 'Linea verticale'], ['orizzontale', 'Linea orizzontale']],
+      direzioneClic,
+      (v) => { direzioneClic = v; A.guida(foglioEl, null); aggiornaSuggerimento(); }
+    );
+    direzione.nodo.hidden = true;
+    riga.appendChild(direzione.nodo);
+
+    const suggerimento = el('p', 'suggerimento');
+    suggerimento.hidden = true;
+    suggerimento.id = prossimoId();
+    casella.setAttribute('aria-describedby', suggerimento.id);
+
+    function aggiornaSuggerimento() {
+      suggerimento.textContent = 'Clicca su una zona per dividerla con una linea ' + direzioneClic +
+        ' nel punto cliccato; clicca su una linea per toglierla. Esc per uscire.';
+    }
+    function imposta(attivo) {
+      modoDividi = attivo;
+      casella.checked = attivo;
+      direzione.nodo.hidden = !attivo;
+      suggerimento.hidden = !attivo;
+      foglioEl.classList.toggle('modo-dividi', attivo);
+      foglioEl.classList.remove('su-linea');
+      aggiornaSuggerimento();
+      if (ultimo && !ultimo.errore) A.evidenzia(foglioEl, ultimo, selezione, { dividi: modoDividi });
+      annuncia(attivo ? 'Modalità dividi con il clic attiva.' : 'Modalità dividi con il clic disattivata.');
+    }
+    casella.addEventListener('change', () => imposta(casella.checked));
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && modoDividi) {
+        imposta(false);
+        casella.focus();
+      }
+    });
+    strumentiEl.append(riga, suggerimento);
+  }
+  creaStrumenti();
+
+  // ------------------------------------------------------------ preset e ultima configurazione
+
+  // Sostituisce tutte le impostazioni (da preset, file o ripristino) e riporta la selezione alla prima zona.
+  function applicaStato(nuovo) {
+    Object.assign(stato, nuovo);
+    const prima = L.primaFoglia(stato.layout);
+    selezione = { tipo: 'zona', id: prima.id };
+    ultimaZonaId = prima.id;
+    cambiato();
+  }
+
+  function creaPannelloPreset() {
+    const nodo = el('fieldset', 'sezione');
+    const legenda = el('legend', null, 'Preset');
+    nodo.appendChild(legenda);
+    nodo.appendChild(el('p', 'nota nota-fissa', 'Un preset salva formato, margini, zone e tutte le impostazioni. Si conserva in questo browser, su questo dispositivo; per spostarlo altrove esportalo in un file.'));
+
+    const idSelezione = prossimoId();
+    const campoSel = el('div', 'campo');
+    const etichettaSel = el('label', null, 'Preset salvati');
+    etichettaSel.htmlFor = idSelezione;
+    const elenco = el('select');
+    elenco.id = idSelezione;
+    campoSel.append(etichettaSel, elenco);
+
+    const idNome = prossimoId();
+    const campoNomePreset = el('div', 'campo');
+    const etichettaNome = el('label', null, 'Nome del preset');
+    etichettaNome.htmlFor = idNome;
+    const nome = el('input');
+    nome.type = 'text';
+    nome.id = idNome;
+    nome.maxLength = PR.MAX_NOME;
+    nome.autocomplete = 'off';
+    nome.spellcheck = false;
+    campoNomePreset.append(etichettaNome, nome);
+
+    const messaggio = el('p', 'messaggio');
+    messaggio.hidden = true;
+    const mostra = (testoMessaggio, errore) => {
+      messaggio.textContent = testoMessaggio;
+      messaggio.className = 'messaggio' + (errore ? ' errore' : '');
+      messaggio.hidden = !testoMessaggio;
+      if (testoMessaggio) annuncia(testoMessaggio);
+    };
+
+    const pulsante = (testoPulsante, azione) => {
+      const b = el('button', 'pulsante secondario', testoPulsante);
+      b.type = 'button';
+      b.addEventListener('click', azione);
+      return b;
+    };
+    const gruppoA = el('div', 'gruppo-pulsanti');
+    const bSalva = pulsante('Salva', salva);
+    const bCarica = pulsante('Carica', carica);
+    const bElimina = pulsante('Elimina', elimina);
+    gruppoA.append(bSalva, bCarica, bElimina);
+    const gruppoB = el('div', 'gruppo-pulsanti due');
+    const bEsporta = pulsante('Esporta in file', esporta);
+    const bImporta = pulsante('Importa da file', () => file.click());
+    gruppoB.append(bEsporta, bImporta);
+    const file = el('input');
+    file.type = 'file';
+    file.accept = '.json,application/json';
+    file.hidden = true;
+    file.setAttribute('aria-label', 'File preset da importare');
+    file.addEventListener('change', importa);
+    const bRipristina = pulsante('Ripristina le impostazioni iniziali', ripristina);
+
+    nodo.append(campoSel, campoNomePreset, gruppoA, messaggio, gruppoB, file, el('div', 'distanziatore'), bRipristina);
+
+    function aggiornaElenco(scelto) {
+      const nomi = archivio.elenco();
+      elenco.replaceChildren();
+      const vuoto = el('option', null, nomi.length ? '— scegli un preset —' : '— nessun preset salvato —');
+      vuoto.value = '';
+      elenco.appendChild(vuoto);
+      for (const n of nomi) {
+        const o = el('option', null, n);
+        o.value = n;
+        elenco.appendChild(o);
+      }
+      elenco.value = scelto && nomi.indexOf(scelto) !== -1 ? scelto : '';
+      bCarica.disabled = bElimina.disabled = !elenco.value;
+    }
+    elenco.addEventListener('change', () => {
+      bCarica.disabled = bElimina.disabled = !elenco.value;
+      if (elenco.value) nome.value = elenco.value;
+    });
+
+    function salva() {
+      const n = PR.sanificaNome(nome.value);
+      if (!n) { mostra('Scrivi un nome per il preset.', true); nome.focus(); return; }
+      if (archivio.esiste(n) && !window.confirm('Esiste già un preset chiamato «' + n + '». Vuoi sostituirlo?')) return;
+      const r = archivio.salva(n, stato);
+      if (!r.ok) { mostra(r.errore, true); return; }
+      aggiornaElenco(n);
+      nome.value = n;
+      mostra('Preset «' + n + '» ' + (r.sostituito ? 'sostituito.' : 'salvato.'), false);
+    }
+
+    function carica() {
+      if (!elenco.value) return;
+      const r = archivio.carica(elenco.value);
+      if (!r.ok) { mostra(r.errore, true); aggiornaElenco(); return; }
+      nome.value = r.nome;
+      applicaStato(r.stato);
+      mostra('Preset «' + r.nome + '» caricato.', false);
+    }
+
+    function elimina() {
+      if (!elenco.value) return;
+      const n = elenco.value;
+      if (!window.confirm('Vuoi eliminare il preset «' + n + '»?')) return;
+      const r = archivio.elimina(n);
+      if (!r.ok) { mostra(r.errore, true); return; }
+      aggiornaElenco();
+      mostra('Preset «' + n + '» eliminato.', false);
+    }
+
+    function esporta() {
+      const n = PR.sanificaNome(nome.value) || 'Preset';
+      const contenuto = JSON.stringify(PR.creaPreset(stato, n), null, 2);
+      const url = URL.createObjectURL(new Blob([contenuto], { type: 'application/json' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'preset-' + P.sanificaNomeFile(n, 'foglio').replace(/\.pdf$/, '') + '.json';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      mostra('File preset creato: ' + a.download + '.', false);
+    }
+
+    function importa() {
+      const f = file.files && file.files[0];
+      file.value = '';
+      if (!f) return;
+      if (f.size > 1024 * 1024) { mostra('Il file è troppo grande per essere un preset.', true); return; }
+      const finito = (testoFile) => {
+        const r = PR.leggiPreset(testoFile);
+        if (r.errore) { mostra('Importazione non riuscita: ' + r.errore, true); return; }
+        nome.value = r.nome;
+        applicaStato(r.stato);
+        mostra('Preset importato' + (r.nome ? ' («' + r.nome + '»)' : '') + '. Premi «Salva» per tenerlo anche nel browser.', false);
+      };
+      if (typeof f.text === 'function') {
+        f.text().then(finito, () => mostra('Non è stato possibile leggere il file.', true));
+      } else {
+        const lettore = new FileReader();
+        lettore.onload = () => finito(String(lettore.result));
+        lettore.onerror = () => mostra('Non è stato possibile leggere il file.', true);
+        lettore.readAsText(f);
+      }
+    }
+
+    function ripristina() {
+      if (!window.confirm('Vuoi ripristinare tutte le impostazioni iniziali? Le impostazioni attuali andranno perse (i preset salvati restano).')) return;
+      applicaStato(M.creaStatoIniziale());
+      mostra('Impostazioni iniziali ripristinate.', false);
+    }
+
+    if (!archivio.disponibile()) {
+      campoSel.hidden = true;
+      campoNomePreset.hidden = true;
+      gruppoA.hidden = true;
+      mostra('Il browser non permette di salvare i preset qui (navigazione privata o dati del sito bloccati): usa «Esporta in file» e «Importa da file».', true);
+    }
+    aggiornaElenco();
+    return { d: { titolo: 'Preset' }, nodo, controlli: [], legenda };
+  }
+
+  {
+    const s = creaPannelloPreset();
+    // Il pulsante «Scarica PDF» è fisso in basso: il pannello preset va in fondo alle sezioni.
+    contenitoreSezioni.appendChild(s.nodo);
+    sezioni.push(s);
+  }
+
+  // Su schermi stretti l'anteprima resta fissa in alto e la barra del PDF in basso: il browser deve
+  // lasciare i controlli selezionati con Tab fuori da queste fasce (scroll-padding nel CSS).
+  {
+    const anteprimaEl = document.querySelector('.anteprima');
+    const barraEl = document.querySelector('.azioni');
+    const misura = () => {
+      const r = document.documentElement.style;
+      r.setProperty('--altezza-anteprima', anteprimaEl.offsetHeight + 'px');
+      r.setProperty('--altezza-barra', barraEl.offsetHeight + 'px');
+    };
+    if (typeof window.ResizeObserver === 'function') {
+      const o = new window.ResizeObserver(misura);
+      o.observe(anteprimaEl);
+      o.observe(barraEl);
+    }
+    window.addEventListener('resize', misura);
+    misura();
+  }
+
+  window.addEventListener('pagehide', salvaSubito);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') salvaSubito(); });
+
+  // Ripresa dell'ultima configurazione (se c'è e se è valida).
+  {
+    const ultima = archivio.leggiUltima();
+    if (ultima) {
+      Object.assign(stato, ultima);
+      selezione = { tipo: 'zona', id: L.primaFoglia(stato.layout).id };
+      ultimaZonaId = selezione.id;
+    }
   }
 
   aggiornaControlli();

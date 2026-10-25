@@ -627,6 +627,11 @@ select {
 /* ---------- Schermi stretti: anteprima fissa in alto, controlli sotto ---------- */
 
 @media (max-width: 860px) {
+  html {
+    scroll-padding-top: calc(var(--altezza-anteprima, 0px) + 12px);
+    scroll-padding-bottom: calc(var(--altezza-barra, 0px) + 12px);
+  }
+
   .app {
     display: flex;
     flex-direction: column;
@@ -674,4 +679,127 @@ select {
   .azioni {
     padding: 12px 16px;
   }
+}
+
+/* ---------- Fase 3: tema, strumenti dell'anteprima, preset ---------- */
+
+.tema {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  margin-top: 14px;
+}
+
+.tema-etichetta {
+  color: var(--testo-attenuato);
+  font-size: 0.85rem;
+}
+
+.campo-compatto {
+  display: block;
+}
+
+.segmenti.compatto {
+  flex-wrap: nowrap;
+  gap: 6px;
+}
+
+.segmenti.compatto .opzione {
+  min-height: 40px;
+  padding: 4px 12px;
+  font-size: 0.88rem;
+}
+
+.strumenti {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--bordo);
+  background: var(--superficie);
+}
+
+.strumenti-riga {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 18px;
+}
+
+.strumenti .casella {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  min-height: 36px;
+  margin: 0;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.suggerimento {
+  margin: 0;
+  color: var(--testo-attenuato);
+  font-size: 0.85rem;
+  line-height: 1.35;
+}
+
+.foglio.modo-dividi .sovrapposizione .area-zona {
+  cursor: crosshair;
+}
+
+.foglio.modo-dividi .sovrapposizione .area-zona:hover,
+.foglio.modo-dividi .sovrapposizione .area-zona.scelta:hover {
+  fill: rgba(36, 70, 168, 0.06);
+}
+
+.foglio.modo-dividi .sovrapposizione .area-divisione {
+  cursor: pointer;
+}
+
+.foglio.modo-dividi .sovrapposizione .area-divisione:hover,
+.foglio.modo-dividi .sovrapposizione .area-divisione.scelta:hover {
+  fill: rgba(192, 57, 43, 0.32);
+}
+
+.sovrapposizione .guida-taglio {
+  stroke: #2446a8;
+  stroke-width: 0.7px;
+  stroke-dasharray: 2 1.2;
+  pointer-events: none;
+}
+
+.gruppo-pulsanti {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.gruppo-pulsanti.due {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.gruppo-pulsanti .pulsante {
+  padding: 8px 6px;
+  font-size: 0.9rem;
+}
+
+.distanziatore {
+  height: 10px;
+}
+
+.messaggio {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border: 1px solid var(--bordo);
+  border-radius: 8px;
+  background: var(--accento-tenue);
+  font-size: 0.88rem;
+}
+
+.messaggio.errore {
+  border-color: var(--errore-bordo);
+  background: var(--errore-sfondo);
+  color: var(--errore-testo);
 }

@@ -4,9 +4,9 @@ Sito statico per creare fogli a **puntini**, **righe** o **quadretti** nel forma
 
 Funziona interamente nel browser: nessun server, nessun account, nessun dato inviato in rete. Si pubblica su GitHub Pages.
 
-> Stato: **Fase 2 di 3** (foglio diviso in zone). Il salvataggio dei preset e l'interruttore del tema chiaro/scuro arrivano nella fase successiva. Vedi `PROJECT_STATUS.md`.
+> Stato: **Fase 3 di 3** completata (zone, preset, tema, ripresa dell'ultima configurazione). Vedi `PROJECT_STATUS.md`.
 
-## Cosa fa (Fasi 1 e 2)
+## Cosa fa
 
 - **Formati:** A3, A4, A5, A6, B5, B6, JIS B5, JIS B6, Letter, Half Letter e misura personalizzata (da 20 a 1000 mm). Verticale o orizzontale.
 - **Motivi:** puntini, righe orizzontali, quadretti, righe verticali, foglio bianco.
@@ -20,6 +20,10 @@ Funziona interamente nel browser: nessun server, nessun account, nessun dato inv
   - ogni zona ha il **proprio motivo, passo, spessore, grigio e puntini**;
   - ogni divisione ha **posizione** (in percentuale o in millimetri), **spazio** tra le due zone e **linea** di divisione con spessore, grigio e stile propri (o nessuna linea);
   - le zone si scelgono dall'elenco o cliccando sull'anteprima; si possono unire di nuovo con **Unisci le due parti in una zona**.
+- **Dividi con il clic:** sopra l'anteprima, spunta «Dividi con il clic» e scegli linea verticale o orizzontale. Un clic su una zona la divide nel punto cliccato (una guida tratteggiata mostra dove cadrà la linea); un clic su una linea la toglie e unisce le zone (resta la prima, con le sue impostazioni). Con **Esc** si esce dalla modalità. Gli stessi comandi sono disponibili anche dai pulsanti e dall'elenco nel pannello, usabili da tastiera.
+- **Preset:** salva con un nome tutte le impostazioni (formato, margini, zone, motivi) nel browser, ricaricale o eliminale; **Esporta in file** crea un file `.json` e **Importa da file** lo rilegge (anche su un altro computer). Il nome del file PDF non fa parte del preset.
+- **Ultima configurazione:** il sito riparte da dove l'avevi lasciato (nello stesso browser). **Ripristina le impostazioni iniziali** torna ai valori di partenza; i preset salvati restano.
+- **Tema:** Automatico (segue il sistema), Chiaro o Scuro, con interruttore in alto nel pannello; la scelta è ricordata.
 - **Anteprima dal vivo** su un tappetino da taglio, con numero di celle e distanza minima dal bordo.
 - **Avviso sul bordo:** molte stampanti non stampano vicino al bordo del foglio. Se il disegno arriva più vicino della soglia che imposti (predefinita: 5 mm) compare un avviso.
 - **PDF vettoriale** con le dimensioni esatte del foglio. Il nome del file è automatico (per esempio `foglio-A4-puntini-5mm.pdf`) oppure lo scegli tu.
@@ -75,11 +79,14 @@ js/layout.js              albero delle zone: elenco, ricerca, divisione e unione
 js/geometria.js           calcolo di zone, linee e puntini in millimetri
 js/anteprima.js           anteprima SVG e selezione delle zone
 js/pdf.js                 esportazione PDF
+js/preset.js              preset, file JSON, archivio nel browser, ultima configurazione
+js/tema.js                tema chiaro/scuro (caricato per primo, evita lampi di colore)
 js/interfaccia.js         controlli e collegamento di tutte le parti
 vendor/jspdf.umd.min.js   libreria jsPDF 4.2.1 (di terzi)
 vendor/LICENSE-jspdf.txt  licenza di jsPDF
 test/geometria.test.js    test automatici di geometria, margini, PDF
 test/zone.test.js         test automatici delle zone
+test/preset.test.js       test automatici di preset, archivio e ultima configurazione
 LICENSE                   licenza del progetto (MIT)
 PROJECT_STATUS.md         stato del progetto
 ```
@@ -94,7 +101,7 @@ Servono solo Node (versione 18 o successiva) e nessuna installazione di pacchett
 node --test
 ```
 
-I test verificano geometria, margini, zone (divisioni, spazi, posizioni, croci, albero non valido), validazione degli input, nomi dei file e il PDF generato (dimensioni della pagina in millimetri, numero di puntini e di linee, tratteggio).
+I test verificano geometria, margini, zone (divisioni, spazi, posizioni, croci, albero non valido), validazione degli input, nomi dei file, preset (file JSON, archivio con dati rovinati o non disponibile) e il PDF generato (dimensioni della pagina in millimetri, numero di puntini e di linee, tratteggio).
 
 ## Libreria di terzi
 
@@ -116,7 +123,8 @@ Il file contiene in fondo il riferimento a una mappa dei sorgenti (`jspdf.umd.mi
 - Le stampanti hanno una zona non stampabile ai bordi: con «senza margine» la parte esterna può mancare.
 - Il numero di puntini è limitato a 80.000 per foglio (somma di tutte le zone) e quello delle linee a 6.000, per tenere veloci anteprima e PDF.
 - Una zona non può essere più stretta di 2 mm: la linea viene spostata e compare un avviso.
-- I preset (browser e file JSON) non sono ancora disponibili (Fase 3).
+- I preset e l'ultima configurazione stanno nel browser (localStorage): valgono per quel browser e quel dispositivo, e si perdono se cancelli i dati del sito o usi la navigazione privata. Per tenerli al sicuro o spostarli usa «Esporta in file». Massimo 50 preset.
+- Un file preset è una configurazione, non uno script: viene sempre ricontrollato e corretto in lettura; file sconosciuti o più grandi di 1 MB vengono rifiutati.
 
 ## Licenza
 
