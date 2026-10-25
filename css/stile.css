@@ -1,0 +1,562 @@
+/* ==========================================================================
+   Generatore di fogli
+   Il tavolo dell'anteprima è un tappetino da taglio verde, come quello usato per rilegare.
+   Il pannello dei controlli resta neutro e sobrio.
+   ========================================================================== */
+
+:root {
+  --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+  --superficie: #f5f7f6;
+  --campo: #ffffff;
+  --testo: #15211d;
+  --testo-attenuato: #4a5a54;
+  --bordo: #c2cfc9;
+  --accento: #2446a8;
+  --accento-testo: #ffffff;
+  --accento-tenue: #e2e8fa;
+  --focus: #1d3a94;
+
+  --mat: #2e6a57;
+  --mat-linea: rgba(255, 255, 255, 0.13);
+  --mat-linea-forte: rgba(255, 255, 255, 0.26);
+
+  --avviso-sfondo: #fff2cc;
+  --avviso-testo: #5a4200;
+  --avviso-bordo: #c28a00;
+  --errore-sfondo: #fde4e1;
+  --errore-testo: #7d1a12;
+  --errore-bordo: #c0392b;
+
+  --pannello-larghezza: clamp(340px, 30vw, 420px);
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --superficie: #141b19;
+    --campo: #0e1412;
+    --testo: #e4ece8;
+    --testo-attenuato: #a7b8b1;
+    --bordo: #34443e;
+    --accento: #9db4ff;
+    --accento-testo: #0d1533;
+    --accento-tenue: #232f5c;
+    --focus: #b9caff;
+
+    --mat: #1b4337;
+    --mat-linea: rgba(255, 255, 255, 0.08);
+    --mat-linea-forte: rgba(255, 255, 255, 0.17);
+
+    --avviso-sfondo: #3a2f0e;
+    --avviso-testo: #f3dc90;
+    --avviso-bordo: #c9a227;
+    --errore-sfondo: #3f1b17;
+    --errore-testo: #ffc9c2;
+    --errore-bordo: #e0584a;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --superficie: #141b19;
+  --campo: #0e1412;
+  --testo: #e4ece8;
+  --testo-attenuato: #a7b8b1;
+  --bordo: #34443e;
+  --accento: #9db4ff;
+  --accento-testo: #0d1533;
+  --accento-tenue: #232f5c;
+  --focus: #b9caff;
+
+  --mat: #1b4337;
+  --mat-linea: rgba(255, 255, 255, 0.08);
+  --mat-linea-forte: rgba(255, 255, 255, 0.17);
+
+  --avviso-sfondo: #3a2f0e;
+  --avviso-testo: #f3dc90;
+  --avviso-bordo: #c9a227;
+  --errore-sfondo: #3f1b17;
+  --errore-testo: #ffc9c2;
+  --errore-bordo: #e0584a;
+  color-scheme: dark;
+}
+
+/* ---------- Base ---------- */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--superficie);
+  color: var(--testo);
+  font: 400 0.95rem/1.45 var(--sans);
+}
+
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.visivamente-nascosto {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.senza-script {
+  margin: 0;
+  padding: 16px;
+  background: var(--errore-sfondo);
+  color: var(--errore-testo);
+}
+
+/* ---------- Struttura della pagina ---------- */
+
+.app {
+  display: grid;
+  grid-template-columns: var(--pannello-larghezza) minmax(0, 1fr);
+  height: 100vh;
+  height: 100dvh;
+}
+
+.pannello {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  border-right: 1px solid var(--bordo);
+  background: var(--superficie);
+}
+
+.testata {
+  padding: 26px 22px 6px;
+}
+
+.testata h1 {
+  margin: 0 0 6px;
+  font: 600 1.85rem/1.15 var(--serif);
+  letter-spacing: -0.01em;
+}
+
+.testata p {
+  margin: 0;
+  max-width: 34ch;
+  color: var(--testo-attenuato);
+}
+
+.sezioni {
+  flex: 1;
+  padding: 0 22px 18px;
+}
+
+.azioni {
+  position: sticky;
+  bottom: 0;
+  padding: 14px 22px;
+  border-top: 1px solid var(--bordo);
+  background: var(--superficie);
+}
+
+/* ---------- Anteprima su tappetino da taglio ---------- */
+
+.anteprima {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.scrivania {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  background-color: var(--mat);
+  background-image:
+    linear-gradient(var(--mat-linea-forte) 1px, transparent 1px),
+    linear-gradient(90deg, var(--mat-linea-forte) 1px, transparent 1px),
+    linear-gradient(var(--mat-linea) 1px, transparent 1px),
+    linear-gradient(90deg, var(--mat-linea) 1px, transparent 1px);
+  background-size: 96px 96px, 96px 96px, 12px 12px, 12px 12px;
+}
+
+.piano {
+  position: absolute;
+  inset: clamp(14px, 3vw, 36px);
+  display: grid;
+  place-items: center;
+}
+
+.foglio {
+  background: #ffffff;
+  line-height: 0;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 14px 32px rgba(0, 0, 0, 0.3);
+}
+
+.foglio svg {
+  display: block;
+}
+
+.foglio.obsoleto {
+  opacity: 0.35;
+  filter: grayscale(1);
+}
+
+.informazioni {
+  max-height: 34vh;
+  padding: 12px 20px 14px;
+  overflow-y: auto;
+  border-top: 1px solid var(--bordo);
+  background: var(--superficie);
+}
+
+.didascalia {
+  margin: 0;
+  color: var(--testo-attenuato);
+}
+
+.avvisi:not(:empty) {
+  margin-top: 8px;
+}
+
+.avviso {
+  margin: 6px 0 0;
+  padding: 8px 12px;
+  border-left: 4px solid;
+  border-radius: 4px;
+}
+
+.avviso.attenzione {
+  border-color: var(--avviso-bordo);
+  background: var(--avviso-sfondo);
+  color: var(--avviso-testo);
+}
+
+.avviso.errore {
+  border-color: var(--errore-bordo);
+  background: var(--errore-sfondo);
+  color: var(--errore-testo);
+}
+
+/* ---------- Sezioni e controlli ---------- */
+
+.sezione {
+  min-width: 0;
+  margin: 0;
+  padding: 18px 0 8px;
+  border: 0;
+  border-top: 1px solid var(--bordo);
+}
+
+.sezione > legend {
+  float: left;
+  width: 100%;
+  padding: 0 0 10px;
+  font: 600 1.15rem/1.2 var(--serif);
+}
+
+.sezione > legend + * {
+  clear: both;
+}
+
+.campo {
+  margin: 0 0 14px;
+}
+
+.campo > label,
+.etichetta {
+  display: block;
+  margin: 0 0 5px;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.nota {
+  margin: 5px 0 0;
+  color: var(--testo-attenuato);
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.nota-fissa {
+  margin: 4px 0 12px;
+}
+
+.campo.disabilitato {
+  opacity: 0.6;
+}
+
+.riga-numero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+}
+
+.riga-numero.solo {
+  grid-template-columns: auto;
+  justify-content: start;
+}
+
+input[type="range"] {
+  width: 100%;
+  height: 32px;
+  margin: 0;
+  accent-color: var(--accento);
+}
+
+.valore {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.unita {
+  min-width: 1.5rem;
+  color: var(--testo-attenuato);
+  font-size: 0.85rem;
+}
+
+input[type="number"],
+input[type="text"],
+select {
+  width: 100%;
+  min-height: 40px;
+  padding: 7px 10px;
+  border: 1px solid var(--bordo);
+  border-radius: 6px;
+  background: var(--campo);
+  color: var(--testo);
+  font: inherit;
+}
+
+input[type="number"] {
+  width: 5.6rem;
+  font-variant-numeric: tabular-nums;
+}
+
+select {
+  appearance: auto;
+}
+
+/* ".campo > .casella" ha più specificità di ".campo > label" e non viene sovrascritta */
+.campo > .casella {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  min-height: 32px;
+  margin: 0;
+  font-weight: 400;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.casella input {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin: 2px 0 0;
+  accent-color: var(--accento);
+}
+
+/* Pulsanti a scelta singola (orientamento, motivo, forma, posizione) */
+
+.segmenti {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.segmenti > label {
+  position: relative; /* ancora il campo radio nascosto alla sua etichetta */
+  flex: 1 1 auto;
+  margin: 0;
+  font-weight: 500;
+}
+
+.segmenti input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  opacity: 0;
+}
+
+.opzione {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--bordo);
+  border-radius: 8px;
+  background: var(--campo);
+  text-align: center;
+  cursor: pointer;
+}
+
+.segmenti input:checked + .opzione {
+  border-color: var(--accento);
+  background: var(--accento-tenue);
+  box-shadow: inset 0 0 0 1px var(--accento);
+  font-weight: 650;
+}
+
+.segmenti input:focus-visible + .opzione {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.segmenti input:disabled + .opzione {
+  cursor: not-allowed;
+}
+
+.motivi {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+}
+
+.motivi .opzione {
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 8px;
+}
+
+/* Miniature dei motivi */
+
+.mini {
+  display: block;
+  width: 44px;
+  height: 30px;
+  border: 1px solid #aebbb5;
+  border-radius: 3px;
+  background-color: #ffffff;
+  background-repeat: repeat;
+  --mini-colore: #46544f;
+}
+
+.mini-puntini {
+  background-image: radial-gradient(circle, var(--mini-colore) 1.1px, transparent 1.5px);
+  background-size: 7px 7px;
+  background-position: 3px 3px;
+}
+
+.mini-righe-o {
+  background-image: repeating-linear-gradient(to bottom, transparent 0 5px, var(--mini-colore) 5px 6px);
+}
+
+.mini-righe-v {
+  background-image: repeating-linear-gradient(to right, transparent 0 6px, var(--mini-colore) 6px 7px);
+}
+
+.mini-quadretti {
+  background-image:
+    repeating-linear-gradient(to bottom, transparent 0 6px, var(--mini-colore) 6px 7px),
+    repeating-linear-gradient(to right, transparent 0 6px, var(--mini-colore) 6px 7px);
+}
+
+/* ---------- Pulsante principale ---------- */
+
+.pulsante {
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 18px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--accento);
+  color: var(--accento-testo);
+  font: 650 1rem/1.2 var(--sans);
+  cursor: pointer;
+}
+
+.pulsante:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.pulsante:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .opzione,
+  .pulsante,
+  .foglio {
+    transition: background-color 0.15s ease, border-color 0.15s ease, opacity 0.2s ease, filter 0.15s ease;
+  }
+}
+
+/* ---------- Schermi stretti: anteprima fissa in alto, controlli sotto ---------- */
+
+@media (max-width: 860px) {
+  .app {
+    display: flex;
+    flex-direction: column;
+    height: auto;
+    min-height: 100vh;
+  }
+
+  .anteprima {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    order: -1;
+    border-bottom: 1px solid var(--bordo);
+  }
+
+  .scrivania {
+    flex: none;
+    height: 38vh;
+    min-height: 220px;
+  }
+
+  .piano {
+    inset: 10px;
+  }
+
+  .informazioni {
+    max-height: 16vh;
+    padding: 8px 14px 10px;
+    font-size: 0.85rem;
+  }
+
+  .pannello {
+    overflow: visible;
+    border-right: 0;
+  }
+
+  .testata {
+    padding: 20px 16px 4px;
+  }
+
+  .sezioni {
+    padding: 0 16px 18px;
+  }
+
+  .azioni {
+    padding: 12px 16px;
+  }
+}

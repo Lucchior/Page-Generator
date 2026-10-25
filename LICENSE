@@ -1,6 +1,6 @@
 MIT License
 
-Copyright (c) 2026 Ludok
+Copyright (c) 2026 [INSERIRE QUI IL NOME DELL'INTESTATARIO]
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -19,3 +19,7 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+---
+Nota: il file vendor/jspdf.umd.min.js è la libreria jsPDF, di terzi, distribuita
+con la propria licenza MIT (vedi vendor/LICENSE-jspdf.txt).

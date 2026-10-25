@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Generatore di fogli per quaderni</title>
+  <meta name="description" content="Crea fogli a puntini, a righe o a quadretti nel formato che preferisci e scaricali in PDF in scala reale, pronti da stampare.">
+  <meta name="color-scheme" content="light dark">
+  <link rel="stylesheet" href="css/stile.css">
+</head>
+<body>
+  <main class="app">
+    <form id="pannello" class="pannello" novalidate aria-label="Impostazioni del foglio">
+      <header class="testata">
+        <h1>Generatore di fogli</h1>
+        <p>Puntini, righe e quadretti da stampare in PDF, nel formato che scegli.</p>
+      </header>
+      <div id="sezioni" class="sezioni"></div>
+      <div class="azioni">
+        <button type="button" id="scarica" class="pulsante">Scarica PDF</button>
+      </div>
+    </form>
+
+    <section class="anteprima" aria-label="Anteprima del foglio">
+      <div id="spazio" class="scrivania">
+        <div class="piano">
+          <div id="foglio" class="foglio" role="img"></div>
+        </div>
+      </div>
+      <div class="informazioni">
+        <p id="didascalia" class="didascalia"></p>
+        <div id="avvisi" class="avvisi" role="status"></div>
+      </div>
+    </section>
+  </main>
+
+  <div id="annunci" class="visivamente-nascosto" role="status" aria-live="polite"></div>
+  <noscript><p class="senza-script">Per usare il generatore serve JavaScript: attivalo nel browser e ricarica la pagina.</p></noscript>
+
+  <script src="vendor/jspdf.umd.min.js"></script>
+  <script src="js/modello.js"></script>
+  <script src="js/geometria.js"></script>
+  <script src="js/anteprima.js"></script>
+  <script src="js/pdf.js"></script>
+  <script src="js/interfaccia.js"></script>
+</body>
+</html>
