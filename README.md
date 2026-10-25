@@ -49,10 +49,10 @@ e apri `http://localhost:8000`.
 
 ## Pubblicare su GitHub Pages (manuale)
 
-1. Crea un repository su GitHub.
+1. Crea il repository `Page-Generator` sul tuo account GitHub (`Lucchior`), se non l'hai già fatto.
 2. Carica tutto il contenuto della cartella del progetto **mantenendo le sottocartelle** (`css/`, `js/`, `vendor/`, `test/`) e i file nella radice (`index.html`, `README.md`, `LICENSE`, `PROJECT_STATUS.md`).
 3. Nel repository vai su **Settings → Pages**. In *Build and deployment* scegli **Deploy from a branch**, il ramo `main` e la cartella `/ (root)`, poi salva.
-4. Dopo un minuto o due il sito è raggiungibile all'indirizzo che GitHub mostra nella stessa pagina (di solito `https://NOME-UTENTE.github.io/NOME-REPOSITORY/`).
+4. Dopo un minuto o due il sito è raggiungibile all'indirizzo che GitHub mostra nella stessa pagina, che dovrebbe essere `https://lucchior.github.io/Page-Generator/`.
 
 Dopo la pubblicazione controlla che: la pagina si carichi senza errori nella console del browser, l'anteprima compaia, il pulsante **Scarica PDF** scarichi un file e il PDF abbia le dimensioni giuste. Tutti i percorsi sono relativi e in minuscolo, quindi funzionano anche sotto il percorso del repository.
 
@@ -108,4 +108,4 @@ Il file contiene in fondo il riferimento a una mappa dei sorgenti (`jspdf.umd.mi
 
 ## Licenza
 
-MIT, vedi `LICENSE`. Ricorda di inserire il nome dell'intestatario nel file. jsPDF ha la sua licenza MIT in `vendor/LICENSE-jspdf.txt`.
+MIT, vedi `LICENSE` (intestatario: Lucchior). jsPDF ha la sua licenza MIT in `vendor/LICENSE-jspdf.txt`.
