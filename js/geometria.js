@@ -54,9 +54,11 @@
   }
 
   // Genera gli elementi di una zona rettangolare { x, y, w, h }.
-  function generaZona(r, imp, adatta) {
+  // "budget" tiene il conto di quanti elementi restano per l'intero foglio (tutte le zone insieme).
+  function generaZona(r, imp, adatta, budget) {
     const out = { elementi: [], estensione: null, colonne: 0, righe: 0, avvisi: [], errore: null };
-    if (imp.motivo === 'bianco') return out;
+    if (imp.motivo === 'bianco' || r.w <= 0 || r.h <= 0) return out;
+    const resto = budget || { punti: MAX_PUNTI, segmenti: MAX_SEGMENTI };
 
     const passi = M.passiEffettivi(imp);
     const usaX = USA_X.indexOf(imp.motivo) !== -1;
@@ -74,10 +76,11 @@
 
     if (imp.motivo === 'puntini') {
       const totale = (ax.n + 1) * (ay.n + 1);
-      if (totale > MAX_PUNTI) {
-        out.errore = 'Troppi puntini (' + totale + '): aumenta il passo o riduci il formato.';
+      if (totale > resto.punti) {
+        out.errore = 'Troppi puntini (' + (MAX_PUNTI - resto.punti + totale) + '): aumenta il passo o riduci il formato.';
         return out;
       }
+      resto.punti -= totale;
       const centri = [];
       for (let j = 0; j <= ay.n; j++) {
         for (let i = 0; i <= ax.n; i++) centri.push([arrotonda(x0 + i * passi.x), arrotonda(y0 + j * passi.y)]);
@@ -98,10 +101,11 @@
     if (imp.motivo === 'righe-orizzontali') totale = ay.n + 1;
     else if (imp.motivo === 'righe-verticali') totale = ax.n + 1;
     else totale = ax.n + 1 + (ay.n + 1);
-    if (totale > MAX_SEGMENTI) {
-      out.errore = 'Troppe linee (' + totale + '): aumenta il passo o riduci il formato.';
+    if (totale > resto.segmenti) {
+      out.errore = 'Troppe linee (' + (MAX_SEGMENTI - resto.segmenti + totale) + '): aumenta il passo o riduci il formato.';
       return out;
     }
+    resto.segmenti -= totale;
 
     if (imp.motivo === 'righe-orizzontali') {
       for (let j = 0; j <= ay.n; j++) {
@@ -133,9 +137,76 @@
     return out;
   }
 
-  // Per ora il layout è una sola zona; la divisione in più zone si aggiunge qui.
-  function risolviLayout(nodo, rettangolo) {
-    return [{ rettangolo, impostazioni: nodo.impostazioni }];
+  // Scende lungo l'albero delle zone assegnando a ogni zona il suo rettangolo.
+  // Una divisione taglia il rettangolo in due parti separate da "spazio" mm; la linea passa al centro dello spazio.
+  // Raccoglie in "ris" zone, divisioni (con la linea da disegnare) e avvisi.
+  function risolviLayout(nodo, r, ris) {
+    if (nodo.tipo !== 'divisione') {
+      ris.zone.push({ id: nodo.id, numero: ++ris.nZone, rettangolo: r, impostazioni: nodo.impostazioni });
+      return;
+    }
+    const numero = ++ris.nDiv;
+    const verticale = nodo.direzione === 'verticale'; // linea verticale: zone affiancate
+    const lunghezza = verticale ? r.w : r.h;
+    const spazio = nodo.spazio;
+    const richiesta =
+      nodo.posizione.unita === '%' ? (lunghezza * nodo.posizione.valore) / 100 : nodo.posizione.valore;
+
+    const minimo = M.MIN_ZONA + spazio / 2;
+    const massimo = lunghezza - M.MIN_ZONA - spazio / 2;
+    let p;
+    if (massimo < minimo) {
+      p = lunghezza / 2;
+      ris.avvisi.push('Divisione ' + numero + ': la zona è troppo piccola per essere divisa con questo spazio.');
+    } else {
+      p = Math.min(massimo, Math.max(minimo, richiesta));
+      if (Math.abs(p - richiesta) > 1e-6) {
+        ris.avvisi.push(
+          'Divisione ' + numero + ': la linea è stata spostata a ' + M.formattaIt(p) +
+            ' mm perché ogni zona deve restare larga almeno ' + M.MIN_ZONA + ' mm.'
+        );
+      }
+    }
+
+    const meta = spazio / 2;
+    const dimA = Math.max(0, p - meta);
+    const dimB = Math.max(0, lunghezza - p - meta);
+    const rettA = verticale ? { x: r.x, y: r.y, w: dimA, h: r.h } : { x: r.x, y: r.y, w: r.w, h: dimA };
+    const rettB = verticale
+      ? { x: r.x + p + meta, y: r.y, w: dimB, h: r.h }
+      : { x: r.x, y: r.y + p + meta, w: r.w, h: dimB };
+    const segmento = verticale
+      ? [arrotonda(r.x + p), arrotonda(r.y), arrotonda(r.x + p), arrotonda(r.y + r.h)]
+      : [arrotonda(r.x), arrotonda(r.y + p), arrotonda(r.x + r.w), arrotonda(r.y + p)];
+    // Fascia cliccabile nell'anteprima: almeno 4 mm, così anche una linea sottile si può selezionare.
+    const spessoreBanda = Math.max(spazio, 4);
+    const banda = verticale
+      ? { x: r.x + p - spessoreBanda / 2, y: r.y, w: spessoreBanda, h: r.h }
+      : { x: r.x, y: r.y + p - spessoreBanda / 2, w: r.w, h: spessoreBanda };
+
+    ris.divisioni.push({
+      id: nodo.id,
+      numero,
+      direzione: nodo.direzione,
+      rettangolo: r,
+      lunghezza,
+      posizioneMm: arrotonda(p),
+      linea: segmento,
+      banda
+    });
+
+    const l = nodo.linea;
+    if (l.visibile) {
+      ris.linee.push(
+        elementoLinee(
+          { spessore: l.spessore, intensitaLinee: l.intensita, stileLinea: l.stile, tratto: l.tratto, spazio: l.spazio },
+          [segmento]
+        )
+      );
+    }
+
+    risolviLayout(nodo.a, rettA, ris);
+    risolviLayout(nodo.b, rettB, ris);
   }
 
   function unisci(a, b) {
@@ -154,6 +225,8 @@
       estensione: null,
       colonne: null,
       righe: null,
+      zone: [],
+      divisioni: [],
       margineMinimo: null,
       avvisi: [],
       errore: null
@@ -170,21 +243,45 @@
       return foglio;
     }
 
-    const zone = risolviLayout(stato.layout, area);
-    for (const z of zone) {
-      const g = generaZona(z.rettangolo, z.impostazioni, stato.margini.modo === 'adatta');
+    const ris = { zone: [], divisioni: [], linee: [], avvisi: [], nZone: 0, nDiv: 0 };
+    risolviLayout(stato.layout, area, ris);
+    const molte = ris.zone.length > 1;
+    const resto = { punti: MAX_PUNTI, segmenti: MAX_SEGMENTI };
+    foglio.avvisi.push(...ris.avvisi);
+
+    for (const z of ris.zone) {
+      const g = generaZona(z.rettangolo, z.impostazioni, stato.margini.modo === 'adatta', resto);
       if (g.errore) {
         foglio.errore = g.errore;
         return foglio;
       }
       foglio.elementi.push(...g.elementi);
       foglio.estensione = unisci(foglio.estensione, g.estensione);
-      foglio.avvisi.push(...g.avvisi);
-      if (zone.length === 1) {
+      for (const a of g.avvisi) foglio.avvisi.push(molte ? 'Zona ' + z.numero + ': ' + a : a);
+      if (!molte) {
         foglio.colonne = g.colonne;
         foglio.righe = g.righe;
       }
     }
+
+    // Le linee di divisione si disegnano per ultime, sopra le griglie.
+    for (const el of ris.linee) {
+      foglio.elementi.push(el);
+      const s = el.segmenti[0];
+      foglio.estensione = unisci(foglio.estensione, {
+        x0: Math.min(s[0], s[2]),
+        y0: Math.min(s[1], s[3]),
+        x1: Math.max(s[0], s[2]),
+        y1: Math.max(s[1], s[3])
+      });
+    }
+    foglio.zone = ris.zone.map((z) => ({
+      id: z.id,
+      numero: z.numero,
+      rettangolo: z.rettangolo,
+      motivo: z.impostazioni.motivo
+    }));
+    foglio.divisioni = ris.divisioni;
 
     if (foglio.estensione) {
       const e = foglio.estensione;

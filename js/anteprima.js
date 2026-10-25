@@ -60,8 +60,51 @@
     return svg;
   }
 
-  function mostra(contenitore, foglio) {
+  // Livello interattivo sopra il foglio: serve solo a scegliere zone e divisioni con il mouse
+  // o il tocco, evidenzia la selezione e mostra i numeri delle zone. Non finisce nel PDF.
+  // Con una sola zona non c'è nulla da scegliere e il livello non viene disegnato.
+  function evidenzia(contenitore, foglio, selezione) {
+    const svg = contenitore.firstElementChild;
+    if (!svg || !foglio || foglio.errore) return;
+    const vecchio = svg.querySelector('.sovrapposizione');
+    if (vecchio) vecchio.remove();
+    if (!foglio.zone || foglio.zone.length < 2) return;
+
+    const g = nodo('g', { class: 'sovrapposizione', 'aria-hidden': 'true' });
+    const rettangolo = (r, attributi) =>
+      nodo('rect', Object.assign({ x: n(r.x), y: n(r.y), width: n(r.w), height: n(r.h) }, attributi));
+
+    for (const z of foglio.zone) {
+      const scelta = selezione && selezione.tipo === 'zona' && selezione.id === z.id;
+      g.appendChild(rettangolo(z.rettangolo, { class: 'area-zona' + (scelta ? ' scelta' : ''), 'data-nodo': z.id }));
+    }
+    for (const d of foglio.divisioni) {
+      const scelta = selezione && selezione.tipo === 'divisione' && selezione.id === d.id;
+      g.appendChild(rettangolo(d.banda, { class: 'area-divisione' + (scelta ? ' scelta' : ''), 'data-nodo': d.id }));
+      if (scelta) {
+        const l = d.linea;
+        g.appendChild(nodo('line', {
+          class: 'guida-divisione', x1: n(l[0]), y1: n(l[1]), x2: n(l[2]), y2: n(l[3])
+        }));
+      }
+    }
+    for (const z of foglio.zone) {
+      const r = z.rettangolo;
+      const lato = Math.min(r.w, r.h);
+      if (lato < 6) continue;
+      const corpo = Math.max(3, Math.min(9, lato / 5));
+      const t = nodo('text', {
+        class: 'numero-zona', x: n(r.x + corpo * 0.6), y: n(r.y + corpo * 1.5), 'font-size': n(corpo)
+      });
+      t.textContent = String(z.numero);
+      g.appendChild(t);
+    }
+    svg.appendChild(g);
+  }
+
+  function mostra(contenitore, foglio, selezione) {
     contenitore.replaceChildren(creaSvg(foglio));
+    evidenzia(contenitore, foglio, selezione);
   }
 
   // Ridimensiona l'SVG in modo che il foglio stia per intero nello spazio disponibile.
@@ -76,5 +119,5 @@
     svg.style.height = Math.floor(foglio.altezza * scala) + 'px';
   }
 
-  Fogli.anteprima = { mostra, adatta, creaSvg };
+  Fogli.anteprima = { mostra, adatta, creaSvg, evidenzia };
 })(typeof window !== 'undefined' ? window : globalThis);

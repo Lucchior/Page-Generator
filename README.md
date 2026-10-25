@@ -4,9 +4,9 @@ Sito statico per creare fogli a **puntini**, **righe** o **quadretti** nel forma
 
 Funziona interamente nel browser: nessun server, nessun account, nessun dato inviato in rete. Si pubblica su GitHub Pages.
 
-> Stato: **Fase 1 di 3** (foglio con una sola zona). La divisione del foglio in più zone, il salvataggio dei preset e il tema chiaro/scuro con interruttore arrivano nelle fasi successive. Vedi `PROJECT_STATUS.md`.
+> Stato: **Fase 2 di 3** (foglio diviso in zone). Il salvataggio dei preset e l'interruttore del tema chiaro/scuro arrivano nella fase successiva. Vedi `PROJECT_STATUS.md`.
 
-## Cosa fa (Fase 1)
+## Cosa fa (Fasi 1 e 2)
 
 - **Formati:** A3, A4, A5, A6, B5, B6, JIS B5, JIS B6, Letter, Half Letter e misura personalizzata (da 20 a 1000 mm). Verticale o orizzontale.
 - **Motivi:** puntini, righe orizzontali, quadretti, righe verticali, foglio bianco.
@@ -16,6 +16,10 @@ Funziona interamente nel browser: nessun server, nessun account, nessun dato inv
   - stile delle linee: continua, tratteggiata, a puntini (con lunghezza del tratto e spazio);
   - forma (tondi o quadrati), dimensione e grigio dei puntini.
 - **Margini:** senza margine (la griglia riempie la pagina), uguali su tutti i lati oppure diversi per ogni lato. Due modi: *fissa* (parte dall'angolo in alto a sinistra) oppure *adattata al passo* (entra un numero esatto di celle e la griglia è centrata).
+- **Zone (Fase 2):** dividi il foglio con una linea verticale o orizzontale; ogni parte si può dividere ancora, senza limite, quindi puoi ottenere due metà, tre colonne, la croce (quattro zone) o griglie più complesse.
+  - ogni zona ha il **proprio motivo, passo, spessore, grigio e puntini**;
+  - ogni divisione ha **posizione** (in percentuale o in millimetri), **spazio** tra le due zone e **linea** di divisione con spessore, grigio e stile propri (o nessuna linea);
+  - le zone si scelgono dall'elenco o cliccando sull'anteprima; si possono unire di nuovo con **Unisci le due parti in una zona**.
 - **Anteprima dal vivo** su un tappetino da taglio, con numero di celle e distanza minima dal bordo.
 - **Avviso sul bordo:** molte stampanti non stampano vicino al bordo del foglio. Se il disegno arriva più vicino della soglia che imposti (predefinita: 5 mm) compare un avviso.
 - **PDF vettoriale** con le dimensioni esatte del foglio. Il nome del file è automatico (per esempio `foglio-A4-puntini-5mm.pdf`) oppure lo scegli tu.
@@ -23,9 +27,14 @@ Funziona interamente nel browser: nessun server, nessun account, nessun dato inv
 ## Come si usa
 
 1. Scegli formato e orientamento.
-2. Scegli il motivo e regola passo, spessore e grigio.
-3. Controlla l'anteprima e gli eventuali avvisi.
-4. Premi **Scarica PDF**.
+2. Se serve, dividi il foglio in zone (sezione **Zone**) e regola posizione e linea di ogni divisione.
+3. Per ogni zona scegli il motivo e regola passo, spessore e grigio.
+4. Controlla l'anteprima e gli eventuali avvisi.
+5. Premi **Scarica PDF**.
+
+I numeri blu sulle zone e le evidenziazioni compaiono solo nell'anteprima: nel PDF c'è solo il disegno del foglio.
+
+Come funziona la divisione: la linea verticale mette due zone affiancate, quella orizzontale una sopra l'altra. La griglia di ogni zona parte dal suo angolo in alto a sinistra (o è centrata, con «Adattata al passo»). Il margine del foglio vale per tutto il foglio, non per ogni zona. Se unisci due zone resta la prima, con le sue impostazioni.
 
 ### Stampa in scala reale
 
@@ -62,13 +71,15 @@ Dopo la pubblicazione controlla che: la pagina si carichi senza errori nella con
 index.html                pagina unica
 css/stile.css             stili, temi chiaro e scuro
 js/modello.js             formati, limiti, valori predefiniti, validazione
-js/geometria.js           calcolo di linee e puntini in millimetri
-js/anteprima.js           anteprima SVG
+js/layout.js              albero delle zone: elenco, ricerca, divisione e unione
+js/geometria.js           calcolo di zone, linee e puntini in millimetri
+js/anteprima.js           anteprima SVG e selezione delle zone
 js/pdf.js                 esportazione PDF
 js/interfaccia.js         controlli e collegamento di tutte le parti
 vendor/jspdf.umd.min.js   libreria jsPDF 4.2.1 (di terzi)
 vendor/LICENSE-jspdf.txt  licenza di jsPDF
-test/geometria.test.js    test automatici
+test/geometria.test.js    test automatici di geometria, margini, PDF
+test/zone.test.js         test automatici delle zone
 LICENSE                   licenza del progetto (MIT)
 PROJECT_STATUS.md         stato del progetto
 ```
@@ -83,7 +94,7 @@ Servono solo Node (versione 18 o successiva) e nessuna installazione di pacchett
 node --test
 ```
 
-I test verificano geometria, margini, validazione degli input, nomi dei file e il PDF generato (dimensioni della pagina in millimetri, numero di puntini e di linee, tratteggio).
+I test verificano geometria, margini, zone (divisioni, spazi, posizioni, croci, albero non valido), validazione degli input, nomi dei file e il PDF generato (dimensioni della pagina in millimetri, numero di puntini e di linee, tratteggio).
 
 ## Libreria di terzi
 
@@ -103,8 +114,9 @@ Il file contiene in fondo il riferimento a una mappa dei sorgenti (`jspdf.umd.mi
 ## Limiti noti
 
 - Le stampanti hanno una zona non stampabile ai bordi: con «senza margine» la parte esterna può mancare.
-- Il numero di puntini è limitato a 80.000 per foglio, per tenere veloci anteprima e PDF.
-- I preset e la divisione in zone non sono ancora disponibili (Fasi 2 e 3).
+- Il numero di puntini è limitato a 80.000 per foglio (somma di tutte le zone) e quello delle linee a 6.000, per tenere veloci anteprima e PDF.
+- Una zona non può essere più stretta di 2 mm: la linea viene spostata e compare un avviso.
+- I preset (browser e file JSON) non sono ancora disponibili (Fase 3).
 
 ## Licenza
 

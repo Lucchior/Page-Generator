@@ -35,8 +35,17 @@
     tratto: { min: 0.05, max: 100 },
     spazio: { min: 0.05, max: 100 },
     dimPagina: { min: 20, max: 1000 },
-    soglia: { min: 0, max: 50 }
+    soglia: { min: 0, max: 50 },
+    posizionePerc: { min: 0, max: 100 },
+    posizioneMm: { min: 0, max: 2000 },
+    spazioZone: { min: 0, max: 100 }
   };
+
+  // Ogni zona deve restare larga almeno così (mm) dopo una divisione.
+  const MIN_ZONA = 2;
+  // Protezioni per i dati importati: non sono limiti d'uso, nessuno li raggiunge a mano.
+  const LIMITE_PROFONDITA = 40;
+  const LIMITE_NODI = 1000;
 
   function impostazioniZonaPredefinite() {
     return {
@@ -52,6 +61,23 @@
       formaPunto: 'tondo',
       dimPunto: 0.5,
       intensitaPunti: 60
+    };
+  }
+
+  // Una divisione taglia una zona in due parti (a e b).
+  //   direzione "verticale": linea verticale, parti affiancate (a a sinistra, b a destra)
+  //   direzione "orizzontale": linea orizzontale, parti sovrapposte (a sopra, b sotto)
+  // La posizione si misura dal bordo sinistro (o superiore) dell'area che viene divisa.
+  function lineaDivisionePredefinita() {
+    return { visibile: true, spessore: 0.4, intensita: 70, stile: 'continua', tratto: 3, spazio: 1.5 };
+  }
+
+  function divisionePredefinita(direzione) {
+    return {
+      direzione: direzione === 'orizzontale' ? 'orizzontale' : 'verticale',
+      posizione: { valore: 50, unita: '%' },
+      spazio: 5,
+      linea: lineaDivisionePredefinita()
     };
   }
 
@@ -103,6 +129,62 @@
     };
   }
 
+  function normalizzaLinea(grezza) {
+    const p = lineaDivisionePredefinita();
+    const g = oggetto(grezza);
+    return {
+      visibile: booleano(g.visibile, p.visibile),
+      spessore: numero(g.spessore, LIMITI.spessore, p.spessore),
+      intensita: numero(g.intensita, LIMITI.intensita, p.intensita),
+      stile: scelta(g.stile, STILI_LINEA, p.stile),
+      tratto: numero(g.tratto, LIMITI.tratto, p.tratto),
+      spazio: numero(g.spazio, LIMITI.spazio, p.spazio)
+    };
+  }
+
+  // Valida l'albero delle zone. I nodi che superano le protezioni diventano semplici zone.
+  function normalizzaNodo(grezzo, profondita, contesto) {
+    const g = oggetto(grezzo);
+    contesto.nodi += 1;
+    if (g.tipo === 'divisione' && profondita < LIMITE_PROFONDITA && contesto.nodi < LIMITE_NODI) {
+      const pos = oggetto(g.posizione);
+      const unita = scelta(pos.unita, ['%', 'mm'], '%');
+      return {
+        tipo: 'divisione',
+        id: '',
+        direzione: scelta(g.direzione, ['verticale', 'orizzontale'], 'verticale'),
+        posizione: {
+          valore: numero(pos.valore, unita === '%' ? LIMITI.posizionePerc : LIMITI.posizioneMm, 50),
+          unita
+        },
+        spazio: numero(g.spazio, LIMITI.spazioZone, 5),
+        linea: normalizzaLinea(g.linea),
+        a: normalizzaNodo(g.a, profondita + 1, contesto),
+        b: normalizzaNodo(g.b, profondita + 1, contesto)
+      };
+    }
+    return { tipo: 'zona', id: '', impostazioni: normalizzaZona(g.impostazioni) };
+  }
+
+  // Assegna identificatori univoci (z1, z2... per le zone, d1, d2... per le divisioni) in ordine di lettura.
+  function rinumera(radiceAlbero) {
+    const contatori = { z: 0, d: 0 };
+    (function visita(nodo) {
+      if (nodo.tipo === 'divisione') {
+        nodo.id = 'd' + ++contatori.d;
+        visita(nodo.a);
+        visita(nodo.b);
+      } else {
+        nodo.id = 'z' + ++contatori.z;
+      }
+    })(radiceAlbero);
+    return radiceAlbero;
+  }
+
+  function contaZone(nodo) {
+    return nodo.tipo === 'divisione' ? contaZone(nodo.a) + contaZone(nodo.b) : 1;
+  }
+
   // Restituisce sempre un nuovo stato valido, a partire da dati non fidati.
   function normalizza(grezzo) {
     const base = creaStatoIniziale();
@@ -128,11 +210,7 @@
         destro: numero(mg.destro, LIMITI.margine, base.margini.destro),
         modo: scelta(mg.modo, ['fisso', 'adatta'], base.margini.modo)
       },
-      layout: {
-        tipo: 'zona',
-        id: 'z1',
-        impostazioni: normalizzaZona(oggetto(g.layout).impostazioni)
-      },
+      layout: rinumera(normalizzaNodo(g.layout, 0, { nodi: 0 })),
       stampa: {
         sogliaAvviso: numero(sg.sogliaAvviso, LIMITI.soglia, base.stampa.sogliaAvviso),
         nomeFile: typeof sg.nomeFile === 'string' ? sg.nomeFile.slice(0, 80) : ''
@@ -175,12 +253,14 @@
 
   function nomeFileAutomatico(stato) {
     const dim = dimensioniPagina(stato.pagina);
-    const imp = stato.layout.impostazioni;
     const formato =
       stato.pagina.formato === 'personalizzato'
         ? formatta(dim.larghezza) + 'x' + formatta(dim.altezza) + 'mm'
         : stato.pagina.formato.replace(/\s+/g, '-') +
           (stato.pagina.orientamento === 'orizzontale' ? '-orizzontale' : '');
+    const zone = contaZone(stato.layout);
+    if (zone > 1) return 'foglio-' + formato + '-' + zone + '-zone.pdf';
+    const imp = stato.layout.impostazioni;
     let nome = 'foglio-' + formato + '-' + imp.motivo;
     if (imp.motivo !== 'bianco') {
       const p = passiEffettivi(imp);
@@ -199,10 +279,14 @@
     MOTIVI_DUE_PASSI,
     STILI_LINEA,
     LIMITI,
+    MIN_ZONA,
     creaStatoIniziale,
     impostazioniZonaPredefinite,
+    lineaDivisionePredefinita,
+    divisionePredefinita,
     normalizza,
     normalizzaZona,
+    contaZone,
     dimensioniPagina,
     passiEffettivi,
     margini,
