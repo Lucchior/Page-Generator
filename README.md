@@ -22,7 +22,9 @@ Funziona interamente nel browser: nessun server, nessun account, nessun dato inv
   - le zone si scelgono dall'elenco o cliccando sull'anteprima; si possono unire di nuovo con **Unisci le due parti in una zona**.
 - **Dividi con il clic:** sopra l'anteprima, spunta «Dividi con il clic» e scegli linea verticale o orizzontale. Un clic su una zona la divide nel punto cliccato (una guida tratteggiata mostra dove cadrà la linea); un clic su una linea la toglie e unisce le zone (resta la prima, con le sue impostazioni). Con **Esc** si esce dalla modalità. Gli stessi comandi sono disponibili anche dai pulsanti e dall'elenco nel pannello, usabili da tastiera.
 - **Preset:** salva con un nome tutte le impostazioni (formato, margini, zone, motivi) nel browser, ricaricale o eliminale; **Esporta in file** crea un file `.json` e **Importa da file** lo rilegge (anche su un altro computer). Il nome del file PDF non fa parte del preset.
-- **Ultima configurazione:** il sito riparte da dove l'avevi lasciato (nello stesso browser). **Ripristina le impostazioni iniziali** torna ai valori di partenza; i preset salvati restano.
+- **Eliminare una zona:** ogni zona nell'elenco ha una piccola **X** in alto a destra; premendola la zona sparisce e quella accanto occupa il suo posto (le altre non cambiano). Non c'è la X sull'unica zona rimasta.
+- **Nuovo foglio:** il pulsante in alto riporta tutto ai valori di partenza (A4, una sola zona, puntini), dopo una conferma. I preset salvati restano.
+- **Ultima configurazione:** il sito riparte da dove l'avevi lasciato (nello stesso browser).
 - **Tema:** Automatico (segue il sistema), Chiaro o Scuro, con interruttore in alto nel pannello; la scelta è ricordata.
 - **Anteprima dal vivo** su un tappetino da taglio, con numero di celle e distanza minima dal bordo.
 - **Avviso sul bordo:** molte stampanti non stampano vicino al bordo del foglio. Se il disegno arriva più vicino della soglia che imposti (predefinita: 5 mm) compare un avviso.
@@ -38,7 +40,7 @@ Funziona interamente nel browser: nessun server, nessun account, nessun dato inv
 
 I numeri blu sulle zone e le evidenziazioni compaiono solo nell'anteprima: nel PDF c'è solo il disegno del foglio.
 
-Come funziona la divisione: la linea verticale mette due zone affiancate, quella orizzontale una sopra l'altra. La griglia di ogni zona parte dal suo angolo in alto a sinistra (o è centrata, con «Adattata al passo»). Il margine del foglio vale per tutto il foglio, non per ogni zona. Se unisci due zone resta la prima, con le sue impostazioni.
+Come funziona la divisione: la linea verticale mette due zone affiancate, quella orizzontale una sopra l'altra. La griglia di ogni zona parte dal suo angolo in alto a sinistra (o è centrata, con «Adattata al passo»). Il margine del foglio vale per tutto il foglio, non per ogni zona. Se unisci due zone resta la prima, con le sue impostazioni; per tenere l'altra elimina la prima con la sua X.
 
 ### Stampa in scala reale
 

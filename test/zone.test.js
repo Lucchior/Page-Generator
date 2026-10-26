@@ -454,3 +454,62 @@ test('PDF con più zone: un riempimento per puntino e una linea per ogni segment
   assert.equal((testo.match(/ l\nS\n/g) || []).length, attesiLinee);
   assert.equal((testo.match(/\/Type\s*\/Page\b/g) || []).length, 1);
 });
+
+// ---------------------------------------------------------------- eliminare una zona
+
+test('eliminaZona: la zona accanto prende il posto della divisione', () => {
+  const s = stato();
+  L.dividiZona(s, 'z1', 'verticale');
+  s.layout.b.impostazioni.motivo = 'quadretti';
+  const r = L.eliminaZona(s, 'z1');
+  assert.equal(r.id, 'z2');
+  assert.equal(s.layout, r);
+  assert.equal(s.layout.tipo, 'zona');
+  assert.equal(s.layout.impostazioni.motivo, 'quadretti');
+  const f = G.generaFoglio(s);
+  assert.equal(f.errore, null);
+  assert.deepEqual(rettangoli(f), [{ x: 10, y: 10, w: 190, h: 277 }]);
+});
+
+test('eliminaZona: elimina la seconda e tiene la prima', () => {
+  const s = stato((x) => { x.layout.impostazioni.passoX = 8; });
+  L.dividiZona(s, 'z1', 'orizzontale');
+  const r = L.eliminaZona(s, 'z2');
+  assert.equal(r.id, 'z1');
+  assert.equal(s.layout.impostazioni.passoX, 8);
+});
+
+test('eliminaZona: il resto dell\'albero resta com\'è', () => {
+  const s = stato();
+  L.dividiZona(s, 'z1', 'verticale');
+  L.dividiZona(s, 'z2', 'orizzontale'); // d2 con z2 e z3 nella parte b
+  s.layout.b.posizione = { valore: 30, unita: '%' };
+  const r = L.eliminaZona(s, 'z1'); // la parte b (d2 con due zone) prende tutto il posto
+  assert.equal(r.id, 'd2');
+  assert.equal(s.layout.id, 'd2');
+  assert.deepEqual(s.layout.posizione, { valore: 30, unita: '%' });
+  assert.equal(M.contaZone(s.layout), 2);
+  const r2 = L.eliminaZona(s, 'z3');
+  assert.equal(r2.id, 'z2');
+  assert.equal(M.contaZone(s.layout), 1);
+});
+
+test('eliminaZona: zona unica, divisione o id inesistente non fanno nulla', () => {
+  const s = stato();
+  assert.equal(L.eliminaZona(s, 'z1'), null);
+  assert.equal(s.layout.id, 'z1');
+  L.dividiZona(s, 'z1', 'verticale');
+  assert.equal(L.eliminaZona(s, 'd1'), null);
+  assert.equal(L.eliminaZona(s, 'z99'), null);
+  assert.equal(M.contaZone(s.layout), 2);
+});
+
+test('dopo eliminare si può dividere ancora senza ripetere identificatori', () => {
+  const s = stato();
+  L.dividiZona(s, 'z1', 'verticale');
+  L.dividiZona(s, 'z2', 'verticale');
+  L.eliminaZona(s, 'z2');
+  L.dividiZona(s, 'z1', 'orizzontale');
+  const id = L.elencaNodi(s.layout).map((v) => v.id);
+  assert.equal(new Set(id).size, id.length);
+});

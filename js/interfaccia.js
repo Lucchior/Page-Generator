@@ -46,6 +46,7 @@
   const scaricaEl = document.getElementById('scarica');
   const strumentiEl = document.getElementById('strumenti');
   const temaEl = document.getElementById('tema');
+  const nuovoEl = document.getElementById('nuovo');
 
   // ------------------------------------------------------------ utilità
 
@@ -344,7 +345,7 @@
     const etichetta = el('span', 'etichetta', 'Zone e divisioni');
     etichetta.id = id + '-etichetta';
     const gruppo = el('div', 'struttura');
-    gruppo.setAttribute('role', 'radiogroup');
+    gruppo.setAttribute('role', 'group');
     gruppo.setAttribute('aria-labelledby', etichetta.id);
     nodo.append(etichetta, gruppo);
     let firma = '';
@@ -359,8 +360,9 @@
         firma = nuova;
         gruppo.replaceChildren();
         voci = elenco.map((v) => {
-          const lab = el('label', 'voce ' + v.tipo);
-          lab.style.setProperty('--livello', String(Math.min(v.profondita, 6)));
+          const voceEl = el('div', 'voce ' + v.tipo);
+          voceEl.style.setProperty('--livello', String(Math.min(v.profondita, 6)));
+          const lab = el('label', 'voce-selezione');
           const inp = el('input');
           inp.type = 'radio';
           inp.name = id;
@@ -370,11 +372,22 @@
           const dettaglio = el('span', 'voce-dettaglio');
           corpo.append(titolo, dettaglio);
           lab.append(inp, corpo);
-          gruppo.appendChild(lab);
+          voceEl.appendChild(lab);
           inp.addEventListener('change', () => {
             if (inp.checked) cambiaSelezione({ tipo: v.tipo, id: v.id });
           });
-          return { id: v.id, inp, dettaglio, titolo };
+          // La X in alto a destra toglie la zona (non esiste per le divisioni né per l'unica zona).
+          let chiudi = null;
+          if (v.tipo === 'zona' && elenco.length > 1) {
+            chiudi = el('button', 'voce-chiudi', '×');
+            chiudi.type = 'button';
+            chiudi.setAttribute('aria-label', 'Elimina ' + v.etichetta);
+            chiudi.title = 'Elimina ' + v.etichetta + ' (la zona accanto prende il suo posto)';
+            chiudi.addEventListener('click', () => eliminaZona(v.id));
+            voceEl.appendChild(chiudi);
+          }
+          gruppo.appendChild(voceEl);
+          return { id: v.id, inp, dettaglio, titolo, chiudi, etichettaNodo: v.etichetta };
         });
         if (aveva) {
           const scelto = voci.find((x) => x.id === selezione.id);
@@ -384,6 +397,11 @@
       for (const v of elenco) {
         const voce = voci.find((x) => x.id === v.id);
         voce.titolo.textContent = v.etichetta;
+        if (voce.chiudi && voce.etichettaNodo !== v.etichetta) {
+          voce.etichettaNodo = v.etichetta;
+          voce.chiudi.setAttribute('aria-label', 'Elimina ' + v.etichetta);
+          voce.chiudi.title = 'Elimina ' + v.etichetta + ' (la zona accanto prende il suo posto)';
+        }
         voce.inp.checked = v.id === selezione.id;
         voce.inp.disabled = false;
       }
@@ -500,6 +518,26 @@
     ultimaZonaId = zona.id;
     annuncia('Zone unite: ora ci sono ' + M.contaZone(stato.layout) + ' zone.');
     cambiato();
+  }
+
+  // Toglie una zona: quella accanto occupa il suo spazio. Le altre zone non cambiano.
+  function eliminaZona(id) {
+    const v = L.elencaNodi(stato.layout).find((x) => x.id === id);
+    const rimasto = L.eliminaZona(stato, id);
+    if (!rimasto) return;
+    const prima = L.primaFoglia(rimasto);
+    selezione = { tipo: 'zona', id: prima.id };
+    ultimaZonaId = prima.id;
+    const ora = M.contaZone(stato.layout);
+    annuncia((v ? v.etichetta : 'Zona') + ' eliminata: ' + (ora > 1 ? 'ora ci sono ' + ora + ' zone.' : 'il foglio è di nuovo una sola zona.'));
+    cambiato();
+    // Il pulsante premuto non esiste più: il focus passa alla voce selezionata (o al primo comando).
+    const scelto = contenitoreSezioni.querySelector('.struttura input:checked');
+    if (scelto && scelto.offsetParent) scelto.focus();
+    else {
+      const prossimo = contenitoreSezioni.querySelector('.sezione:not([hidden]) button');
+      if (prossimo) prossimo.focus();
+    }
   }
 
   function selezionaGenitore() {
@@ -1072,9 +1110,7 @@
     file.hidden = true;
     file.setAttribute('aria-label', 'File preset da importare');
     file.addEventListener('change', importa);
-    const bRipristina = pulsante('Ripristina le impostazioni iniziali', ripristina);
-
-    nodo.append(campoSel, campoNomePreset, gruppoA, messaggio, gruppoB, file, el('div', 'distanziatore'), bRipristina);
+    nodo.append(campoSel, campoNomePreset, gruppoA, messaggio, gruppoB, file);
 
     function aggiornaElenco(scelto) {
       const nomi = archivio.elenco();
@@ -1161,12 +1197,6 @@
       }
     }
 
-    function ripristina() {
-      if (!window.confirm('Vuoi ripristinare tutte le impostazioni iniziali? Le impostazioni attuali andranno perse (i preset salvati restano).')) return;
-      applicaStato(M.creaStatoIniziale());
-      mostra('Impostazioni iniziali ripristinate.', false);
-    }
-
     if (!archivio.disponibile()) {
       campoSel.hidden = true;
       campoNomePreset.hidden = true;
@@ -1175,6 +1205,15 @@
     }
     aggiornaElenco();
     return { d: { titolo: 'Preset' }, nodo, controlli: [], legenda };
+  }
+
+  // «Nuovo foglio»: torna ai valori di partenza (A4, una zona, puntini). I preset salvati restano.
+  if (nuovoEl) {
+    nuovoEl.addEventListener('click', () => {
+      if (!window.confirm('Vuoi ricominciare da capo? Le impostazioni attuali andranno perse (i preset salvati restano).')) return;
+      applicaStato(M.creaStatoIniziale());
+      annuncia('Nuovo foglio: impostazioni iniziali ripristinate.');
+    });
   }
 
   {

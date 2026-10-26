@@ -106,6 +106,18 @@
     return zona;
   }
 
+  // Toglie una zona: la zona (o il gruppo di zone) accanto prende il suo posto e la divisione sparisce.
+  // Restituisce il nodo che ha preso il posto, oppure null (zona inesistente o unica zona del foglio).
+  function eliminaZona(stato, idZona) {
+    const zona = trovaNodo(stato.layout, idZona);
+    if (!zona || zona.tipo !== 'zona') return null;
+    const genitore = trovaGenitore(stato.layout, idZona);
+    if (!genitore) return null;
+    const rimasto = genitore.a.id === idZona ? genitore.b : genitore.a;
+    sostituisci(stato, genitore.id, rimasto);
+    return rimasto;
+  }
+
   Fogli.layout = {
     elencaNodi,
     foglie,
@@ -114,7 +126,8 @@
     trovaGenitore,
     nuovoId,
     dividiZona,
-    unisciDivisione
+    unisciDivisione,
+    eliminaZona
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = Fogli.layout;

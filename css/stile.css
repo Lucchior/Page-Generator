@@ -528,9 +528,48 @@ select {
 
 .struttura > .voce {
   position: relative;
-  display: block;
   margin: 0 0 0 calc(var(--livello, 0) * 14px);
   font-weight: 500;
+}
+
+.voce-selezione {
+  position: relative;
+  display: block;
+  margin: 0;
+  font-weight: 500;
+}
+
+.voce.zona .voce-corpo {
+  padding-right: 52px; /* spazio per la X */
+}
+
+/* X in alto a destra: toglie la zona */
+.voce-chiudi {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0 0 2px;
+  border: 1px solid var(--bordo);
+  border-radius: 50%;
+  background: var(--campo);
+  color: var(--testo-attenuato);
+  font: 400 1.4rem/1 var(--sans);
+  cursor: pointer;
+}
+
+.voce-chiudi:hover {
+  border-color: var(--errore-bordo);
+  background: var(--errore-sfondo);
+  color: var(--errore-testo);
+}
+
+.voce-chiudi:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
 }
 
 .voce-corpo {
@@ -802,4 +841,12 @@ select {
   border-color: var(--errore-bordo);
   background: var(--errore-sfondo);
   color: var(--errore-testo);
+}
+
+/* Pulsante «Nuovo foglio» in testata */
+.pulsante.secondario.nuovo {
+  width: auto;
+  min-height: 44px;
+  margin-top: 14px;
+  padding: 6px 16px;
 }
