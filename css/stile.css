@@ -394,8 +394,7 @@ select {
   font-weight: 500;
 }
 
-.segmenti input,
-.struttura input {
+.segmenti input {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -518,97 +517,6 @@ select {
   filter: none;
 }
 
-/* Elenco di zone e divisioni */
-
-.struttura {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.struttura > .voce {
-  position: relative;
-  margin: 0 0 0 calc(var(--livello, 0) * 14px);
-  font-weight: 500;
-}
-
-.voce-selezione {
-  position: relative;
-  display: block;
-  margin: 0;
-  font-weight: 500;
-}
-
-.voce.zona .voce-corpo {
-  padding-right: 52px; /* spazio per la X */
-}
-
-/* X in alto a destra: toglie la zona */
-.voce-chiudi {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  padding: 0 0 2px;
-  border: 1px solid var(--bordo);
-  border-radius: 50%;
-  background: var(--campo);
-  color: var(--testo-attenuato);
-  font: 400 1.4rem/1 var(--sans);
-  cursor: pointer;
-}
-
-.voce-chiudi:hover {
-  border-color: var(--errore-bordo);
-  background: var(--errore-sfondo);
-  color: var(--errore-testo);
-}
-
-.voce-chiudi:focus-visible {
-  outline: 3px solid var(--focus);
-  outline-offset: 2px;
-}
-
-.voce-corpo {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 2px 10px;
-  min-height: 44px;
-  padding: 8px 12px;
-  border: 1px solid var(--bordo);
-  border-radius: 8px;
-  background: var(--campo);
-  cursor: pointer;
-}
-
-.voce.divisione .voce-corpo {
-  border-style: dashed;
-}
-
-.voce-titolo {
-  font-weight: 650;
-}
-
-.voce-dettaglio {
-  color: var(--testo-attenuato);
-  font-size: 0.85rem;
-}
-
-.struttura input:checked + .voce-corpo {
-  border-color: var(--accento);
-  background: var(--accento-tenue);
-  box-shadow: inset 0 0 0 1px var(--accento);
-}
-
-.struttura input:focus-visible + .voce-corpo {
-  outline: 3px solid var(--focus);
-  outline-offset: 2px;
-}
-
 /* Livello interattivo sull'anteprima (non fa parte del PDF) */
 
 .sovrapposizione .area-zona,
@@ -618,29 +526,32 @@ select {
   cursor: pointer;
 }
 
-.sovrapposizione .area-zona:hover {
-  fill: rgba(36, 70, 168, 0.1);
+@media (hover: hover) {
+  .sovrapposizione .area-zona:hover {
+    fill: rgba(36, 70, 168, 0.1);
+  }
 }
 
-.sovrapposizione .area-zona.scelta {
-  fill: rgba(36, 70, 168, 0.16);
+@media (hover: hover) {
+  .sovrapposizione .area-divisione:hover {
+    fill: rgba(36, 70, 168, 0.22);
+  }
+}
+
+.sovrapposizione .area-zona.evidenziata {
+  fill: rgba(36, 70, 168, 0.14);
+}
+
+.sovrapposizione .area-divisione.evidenziata {
+  fill: rgba(36, 70, 168, 0.3);
+}
+
+/* Linea che non viene stampata: resta come guida tratteggiata solo in anteprima */
+.sovrapposizione .guida-non-stampata {
   stroke: #2446a8;
-  stroke-width: 0.6px;
-  stroke-dasharray: 2 1.2;
-}
-
-.sovrapposizione .area-divisione:hover {
-  fill: rgba(36, 70, 168, 0.22);
-}
-
-.sovrapposizione .area-divisione.scelta {
-  fill: rgba(36, 70, 168, 0.12);
-}
-
-.sovrapposizione .guida-divisione {
-  stroke: #2446a8;
-  stroke-width: 1px;
-  stroke-opacity: 0.85;
+  stroke-width: 0.5px;
+  stroke-dasharray: 2.5 1.5;
+  stroke-opacity: 0.8;
   pointer-events: none;
 }
 
@@ -787,8 +698,7 @@ select {
   cursor: crosshair;
 }
 
-.foglio.modo-dividi .sovrapposizione .area-zona:hover,
-.foglio.modo-dividi .sovrapposizione .area-zona.scelta:hover {
+.foglio.modo-dividi .sovrapposizione .area-zona:hover {
   fill: rgba(36, 70, 168, 0.06);
 }
 
@@ -796,8 +706,7 @@ select {
   cursor: pointer;
 }
 
-.foglio.modo-dividi .sovrapposizione .area-divisione:hover,
-.foglio.modo-dividi .sovrapposizione .area-divisione.scelta:hover {
+.foglio.modo-dividi .sovrapposizione .area-divisione:hover {
   fill: rgba(192, 57, 43, 0.32);
 }
 
@@ -849,4 +758,183 @@ select {
   min-height: 44px;
   margin-top: 14px;
   padding: 6px 16px;
+}
+
+/* ---------- Fase 4: blocchi per zone e divisioni ---------- */
+
+.barra-blocchi {
+  display: flex;
+  gap: 8px;
+  margin: 4px 0 10px;
+}
+
+.pulsante.secondario.piccolo {
+  width: auto;
+  min-height: 40px;
+  padding: 6px 14px;
+  font-size: 0.9rem;
+}
+
+.blocchi {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.blocco {
+  border: 1px solid var(--bordo);
+  border-radius: 10px;
+  background: var(--campo);
+}
+
+.blocco.divisione {
+  border-style: dashed;
+  background: transparent;
+  margin: 0 14px;
+}
+
+.blocco-testa {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.blocco-titolo {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1em 1fr;
+  align-items: baseline;
+  gap: 2px 10px;
+  min-height: 48px;
+  padding: 10px 52px 10px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.blocco.divisione .blocco-titolo {
+  padding-right: 12px;
+}
+
+.blocco-titolo:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.freccia {
+  display: inline-block;
+  grid-row: 1;
+  width: 1em;
+  color: var(--testo-attenuato);
+  transition: none;
+}
+
+.blocco.aperto > .blocco-testa .freccia {
+  transform: rotate(90deg);
+}
+
+.blocco-nome {
+  font: 600 1.1rem/1.2 var(--serif);
+}
+
+.blocco-riepilogo {
+  grid-column: 2;
+  color: var(--testo-attenuato);
+  font-size: 0.85rem;
+}
+
+.blocco.aperto > .blocco-testa {
+  border-bottom: 1px solid var(--bordo);
+}
+
+.blocco-corpo {
+  padding: 4px 14px 14px;
+}
+
+.blocco-corpo[hidden] {
+  display: none;
+}
+
+.sottosezione {
+  min-width: 0;
+  margin: 12px 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.sottosezione > legend {
+  margin: 0 0 6px;
+  padding: 0;
+  color: var(--testo-attenuato);
+  font: 650 0.8rem/1.2 var(--sans);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.sottosezione > legend + * {
+  margin-top: 0;
+}
+
+.sottosezione .campo + .campo,
+.sottosezione .campo + .nota {
+  margin-top: 12px;
+}
+
+.voce-chiudi {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0 0 2px;
+  border: 1px solid var(--bordo);
+  border-radius: 50%;
+  background: var(--campo);
+  color: var(--testo-attenuato);
+  font: 400 1.4rem/1 var(--sans);
+  cursor: pointer;
+}
+
+.voce-chiudi:hover {
+  border-color: var(--errore-bordo);
+  background: var(--errore-sfondo);
+  color: var(--errore-testo);
+}
+
+.voce-chiudi:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.blocco-testa .voce-chiudi {
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+}
+
+/* Passando il mouse sulla zona nell'anteprima si illumina il suo blocco */
+.blocco.evidenziato {
+  border-color: var(--accento);
+  box-shadow: 0 0 0 1px var(--accento);
+}
+
+/* Lampeggio breve quando si arriva al blocco dal clic sull'anteprima */
+.blocco.lampo {
+  animation: lampo-blocco 1.3s ease-out;
+}
+
+@keyframes lampo-blocco {
+  0%, 35% { background: var(--accento-tenue); box-shadow: 0 0 0 3px var(--accento); }
+  100% { background: var(--campo); box-shadow: 0 0 0 0 transparent; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .blocco.lampo {
+    animation: none;
+    box-shadow: 0 0 0 3px var(--accento);
+  }
 }

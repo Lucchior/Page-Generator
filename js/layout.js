@@ -29,6 +29,23 @@
     return elenco;
   }
 
+  // Ordine di visualizzazione dei blocchi nel pannello: ogni divisione sta tra le sue due parti
+  // (zona 1, divisione 1, zona 2...). Le etichette sono quelle di elencaNodi.
+  function ordineVisivo(nodo) {
+    const etichette = new Map(elencaNodi(nodo).map((v) => [v.id, v]));
+    const elenco = [];
+    (function visita(n) {
+      if (n.tipo === 'divisione') {
+        visita(n.a);
+        elenco.push(etichette.get(n.id));
+        visita(n.b);
+      } else {
+        elenco.push(etichette.get(n.id));
+      }
+    })(nodo);
+    return elenco;
+  }
+
   function foglie(nodo) {
     return elencaNodi(nodo)
       .filter((v) => v.tipo === 'zona')
@@ -120,6 +137,7 @@
 
   Fogli.layout = {
     elencaNodi,
+    ordineVisivo,
     foglie,
     primaFoglia,
     trovaNodo,

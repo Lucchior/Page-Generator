@@ -19,10 +19,13 @@ Funziona interamente nel browser: nessun server, nessun account, nessun dato inv
 - **Zone (Fase 2):** dividi il foglio con una linea verticale o orizzontale; ogni parte si può dividere ancora, senza limite, quindi puoi ottenere due metà, tre colonne, la croce (quattro zone) o griglie più complesse.
   - ogni zona ha il **proprio motivo, passo, spessore, grigio e puntini**;
   - ogni divisione ha **posizione** (in percentuale o in millimetri), **spazio** tra le due zone e **linea** di divisione con spessore, grigio e stile propri (o nessuna linea);
-  - le zone si scelgono dall'elenco o cliccando sull'anteprima; si possono unire di nuovo con **Unisci le due parti in una zona**.
-- **Dividi con il clic:** sopra l'anteprima, spunta «Dividi con il clic» e scegli linea verticale o orizzontale. Un clic su una zona la divide nel punto cliccato (una guida tratteggiata mostra dove cadrà la linea); un clic su una linea la toglie e unisce le zone (resta la prima, con le sue impostazioni). Con **Esc** si esce dalla modalità. Gli stessi comandi sono disponibili anche dai pulsanti e dall'elenco nel pannello, usabili da tastiera.
+  - nel pannello **ogni zona e ogni linea di divisione ha il suo blocco** (Zona 1, Divisione 1, Zona 2…, nell'ordine in cui compaiono sul foglio). I blocchi si aprono e si chiudono con un clic sull'intestazione, che mostra un riassunto (misure, motivo, posizione della linea); **Apri tutti / Chiudi tutti** li gestisce insieme;
+  - passando il mouse su un blocco si illumina la zona (o la linea) corrispondente nell'anteprima, e viceversa; cliccando una zona o una linea nell'anteprima si apre il suo blocco, che lampeggia un attimo. Non resta nessuna selezione sul disegno;
+  - la spunta **«Stampa questa linea nel PDF»** di ogni divisione permette di non stampare la linea: in anteprima resta come guida tratteggiata (utile per stampare la linea di taglio solo sul primo foglio);
+  - le zone si uniscono di nuovo con **Unisci le due parti in una zona**.
+- **Dividi con il clic:** sopra l'anteprima, spunta «Dividi con il clic» e scegli linea verticale o orizzontale. Un clic su una zona la divide nel punto cliccato (una guida tratteggiata mostra dove cadrà la linea); un clic su una linea la toglie e unisce le zone (resta la prima, con le sue impostazioni). Con **Esc** si esce dalla modalità. Gli stessi comandi sono disponibili anche dai pulsanti nei blocchi, usabili da tastiera.
 - **Preset:** salva con un nome tutte le impostazioni (formato, margini, zone, motivi) nel browser, ricaricale o eliminale; **Esporta in file** crea un file `.json` e **Importa da file** lo rilegge (anche su un altro computer). Il nome del file PDF non fa parte del preset.
-- **Eliminare una zona:** ogni zona nell'elenco ha una piccola **X** in alto a destra; premendola la zona sparisce e quella accanto occupa il suo posto (le altre non cambiano). Non c'è la X sull'unica zona rimasta.
+- **Eliminare una zona:** il blocco di ogni zona ha una piccola **X** in alto a destra; premendola la zona sparisce e quella accanto occupa il suo posto (le altre non cambiano). Non c'è la X sull'unica zona rimasta.
 - **Nuovo foglio:** il pulsante in alto riporta tutto ai valori di partenza (A4, una sola zona, puntini), dopo una conferma. I preset salvati restano.
 - **Ultima configurazione:** il sito riparte da dove l'avevi lasciato (nello stesso browser).
 - **Tema:** Automatico (segue il sistema), Chiaro o Scuro, con interruttore in alto nel pannello; la scelta è ricordata.
@@ -38,7 +41,7 @@ Funziona interamente nel browser: nessun server, nessun account, nessun dato inv
 4. Controlla l'anteprima e gli eventuali avvisi.
 5. Premi **Scarica PDF**.
 
-I numeri blu sulle zone e le evidenziazioni compaiono solo nell'anteprima: nel PDF c'è solo il disegno del foglio.
+I numeri blu sulle zone, le evidenziazioni e le guide tratteggiate compaiono solo nell'anteprima: nel PDF c'è solo il disegno del foglio.
 
 Come funziona la divisione: la linea verticale mette due zone affiancate, quella orizzontale una sopra l'altra. La griglia di ogni zona parte dal suo angolo in alto a sinistra (o è centrata, con «Adattata al passo»). Il margine del foglio vale per tutto il foglio, non per ogni zona. Se unisci due zone resta la prima, con le sue impostazioni; per tenere l'altra elimina la prima con la sua X.
 

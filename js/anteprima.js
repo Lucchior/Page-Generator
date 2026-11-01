@@ -63,7 +63,7 @@
   // Livello interattivo sopra il foglio: serve solo a scegliere zone e divisioni con il mouse
   // o il tocco, evidenzia la selezione e mostra i numeri delle zone. Non finisce nel PDF.
   // Con una sola zona non c'è nulla da scegliere e il livello non viene disegnato.
-  function evidenzia(contenitore, foglio, selezione, opzioni) {
+  function evidenzia(contenitore, foglio, opzioni) {
     const svg = contenitore.firstElementChild;
     if (!svg || !foglio || foglio.errore) return;
     const vecchio = svg.querySelector('.sovrapposizione');
@@ -76,17 +76,17 @@
     const rettangolo = (r, attributi) =>
       nodo('rect', Object.assign({ x: n(r.x), y: n(r.y), width: n(r.w), height: n(r.h) }, attributi));
 
+    // Aree sensibili al passaggio del mouse e al clic: nessuna selezione che resta sul disegno.
     for (const z of foglio.zone) {
-      const scelta = molte && selezione && selezione.tipo === 'zona' && selezione.id === z.id;
-      g.appendChild(rettangolo(z.rettangolo, { class: 'area-zona' + (scelta ? ' scelta' : ''), 'data-nodo': z.id }));
+      g.appendChild(rettangolo(z.rettangolo, { class: 'area-zona', 'data-nodo': z.id }));
     }
     for (const d of foglio.divisioni) {
-      const scelta = selezione && selezione.tipo === 'divisione' && selezione.id === d.id;
-      g.appendChild(rettangolo(d.banda, { class: 'area-divisione' + (scelta ? ' scelta' : ''), 'data-nodo': d.id }));
-      if (scelta) {
+      g.appendChild(rettangolo(d.banda, { class: 'area-divisione', 'data-nodo': d.id }));
+      // Una linea che non viene stampata resta visibile qui come guida tratteggiata (solo anteprima).
+      if (!d.stampata) {
         const l = d.linea;
         g.appendChild(nodo('line', {
-          class: 'guida-divisione', x1: n(l[0]), y1: n(l[1]), x2: n(l[2]), y2: n(l[3])
+          class: 'guida-non-stampata', x1: n(l[0]), y1: n(l[1]), x2: n(l[2]), y2: n(l[3])
         }));
       }
     }
@@ -106,9 +106,9 @@
     svg.appendChild(g);
   }
 
-  function mostra(contenitore, foglio, selezione, opzioni) {
+  function mostra(contenitore, foglio, opzioni) {
     contenitore.replaceChildren(creaSvg(foglio));
-    evidenzia(contenitore, foglio, selezione, opzioni);
+    evidenzia(contenitore, foglio, opzioni);
   }
 
   // Da coordinate dello schermo a millimetri sul foglio (origine in alto a sinistra).

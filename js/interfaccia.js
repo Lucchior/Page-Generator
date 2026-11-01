@@ -23,9 +23,10 @@
   let contatoreId = 0;
   let ultimo = null;
   let pianificato = false;
-  // Selezione corrente: una zona (le cui impostazioni sono in modifica) o una divisione.
-  let selezione = { tipo: 'zona', id: 'z1' };
-  let ultimaZonaId = 'z1';
+  // Blocchi del pannello (uno per zona e per divisione) e stato aperto/chiuso di ciascuno.
+  const blocchi = [];
+  const aperti = new Map();
+  let firmaBlocchi = '';
   // Modalità «Dividi con il clic»: il clic sull'anteprima divide una zona o toglie una linea.
   let modoDividi = false;
   let direzioneClic = 'verticale';
@@ -59,75 +60,52 @@
 
   const prossimoId = () => 'c' + ++contatoreId;
   const valoreCampo = (v) => String(Math.round(v * 1000) / 1000);
-  const testo = (v, stato_) => (typeof v === 'function' ? v(stato_) : v);
-  const val = (v) => testo(v, stato);
+  const testo = (v, stato_, ctx) => (typeof v === 'function' ? v(stato_, ctx) : v);
+  const val = (v, ctx) => testo(v, stato, ctx);
 
   function annuncia(messaggio) {
     annunciEl.textContent = '';
     window.setTimeout(() => { annunciEl.textContent = messaggio; }, 50);
   }
 
-  // Zona in modifica: quella selezionata, oppure l'ultima scelta se è selezionata una divisione.
-  function zonaCorrente() {
-    const id = selezione.tipo === 'zona' ? selezione.id : ultimaZonaId;
-    const n = L.trovaNodo(stato.layout, id);
-    return n && n.tipo === 'zona' ? n : L.primaFoglia(stato.layout);
-  }
-  function divisioneCorrente() {
-    const n = selezione.tipo === 'divisione' ? L.trovaNodo(stato.layout, selezione.id) : null;
-    return n && n.tipo === 'divisione' ? n : null;
-  }
-  const impostazioni = () => zonaCorrente().impostazioni;
-  const piuZone = () => M.contaZone(stato.layout) > 1;
-  const suffissoZona = () => {
-    if (!piuZone()) return '';
-    const v = L.elencaNodi(stato.layout).find((x) => x.id === zonaCorrente().id);
-    return ' — ' + (v ? v.etichetta : '');
-  };
-
-  // I percorsi arrivano solo dai descrittori qui sotto; "zona." indica la zona in modifica,
-  // "divisione." la divisione selezionata.
-  function risolvi(percorso) {
+  // I percorsi arrivano solo dai descrittori; «zona.» e «divisione.» valgono per il nodo del blocco (ctx.id).
+  function risolvi(percorso, ctx) {
     const parti = percorso.split('.');
     let base = stato;
     if (parti[0] === 'zona') {
-      base = zonaCorrente().impostazioni;
+      base = L.trovaNodo(stato.layout, ctx.id).impostazioni;
       parti.shift();
     } else if (parti[0] === 'divisione') {
-      base = divisioneCorrente();
+      base = L.trovaNodo(stato.layout, ctx.id);
       parti.shift();
     }
     while (parti.length > 1) base = base[parti.shift()];
     return [base, parti[0]];
   }
-  function leggi(percorso) {
-    const [b, k] = risolvi(percorso);
+  function leggi(percorso, ctx) {
+    const [b, k] = risolvi(percorso, ctx);
     return b[k];
   }
-  function scrivi(percorso, valore) {
-    const [b, k] = risolvi(percorso);
+  function scrivi(percorso, valore, ctx) {
+    const [b, k] = risolvi(percorso, ctx);
     b[k] = valore;
   }
-
-  const motivo = () => impostazioni().motivo;
-  const motivoTra = (...elenco) => () => elenco.indexOf(motivo()) !== -1;
-  const dueAssi = () => M.MOTIVI_DUE_PASSI.indexOf(motivo()) !== -1;
 
   // ------------------------------------------------------------ componenti
 
   // Parti comuni: etichetta, nota d'aiuto, visibilità e abilitazione.
-  function base(d, nodo) {
+  function base(d, nodo, ctx) {
     const nota = el('p', 'nota');
     nota.id = prossimoId();
     nodo.appendChild(nota);
     const c = { d, nodo, nota, sincronizza() {} };
     c.aggiorna = function () {
-      const visibile = d.visibile ? d.visibile(stato) : true;
+      const visibile = d.visibile ? d.visibile(stato, ctx) : true;
       nodo.hidden = !visibile;
-      const abilitato = d.abilitato ? d.abilitato(stato) : true;
+      const abilitato = d.abilitato ? d.abilitato(stato, ctx) : true;
       nodo.classList.toggle('disabilitato', !abilitato);
       for (const i of nodo.querySelectorAll('input,select')) i.disabled = !abilitato;
-      const t = d.nota ? testo(d.nota, stato) : '';
+      const t = d.nota ? testo(d.nota, stato, ctx) : '';
       nota.textContent = t;
       nota.hidden = !t;
       c.sincronizza();
@@ -139,7 +117,7 @@
     for (const i of campi) i.setAttribute('aria-describedby', c.nota.id);
   }
 
-  function creaNumero(d) {
+  function creaNumero(d, ctx) {
     const id = prossimoId();
     const nodo = el('div', 'campo campo-numero');
     const etichetta = el('label');
@@ -166,21 +144,21 @@
     valore.append(num, unitaEl);
     // Limiti e unità possono dipendere dallo stato (posizione di una divisione in mm o %).
     const lim = () => ({
-      min: val(d.min), max: val(d.max), minC: val(d.minCursore), maxC: val(d.maxCursore), unita: val(d.unita)
+      min: val(d.min, ctx), max: val(d.max, ctx), minC: val(d.minCursore, ctx), maxC: val(d.maxCursore, ctx), unita: val(d.unita, ctx)
     });
     riga.appendChild(valore);
 
-    const c = base(d, nodo);
+    const c = base(d, nodo, ctx);
     descrivi(c, num);
 
     c.sincronizza = function () {
-      const t = testo(d.etichetta, stato);
+      const t = testo(d.etichetta, stato, ctx);
       const l = lim();
       etichetta.textContent = t;
       unitaEl.textContent = l.unita;
       num.min = l.min;
       num.max = l.max;
-      const v = leggi(d.percorso);
+      const v = leggi(d.percorso, ctx);
       if (document.activeElement !== num) num.value = valoreCampo(v);
       if (cursore) {
         cursore.min = l.minC;
@@ -195,13 +173,13 @@
       const v = num.valueAsNumber;
       const l = lim();
       if (!Number.isFinite(v) || v < l.min || v > l.max) return; // si corregge quando esci dal campo
-      scrivi(d.percorso, v);
+      scrivi(d.percorso, v, ctx);
       cambiato();
     });
     num.addEventListener('change', () => {
       const v = num.valueAsNumber;
       if (!Number.isFinite(v)) {
-        num.value = valoreCampo(leggi(d.percorso));
+        num.value = valoreCampo(leggi(d.percorso, ctx));
         return;
       }
       const l = lim();
@@ -209,20 +187,20 @@
       if (limitato !== v) {
         annuncia('Valore portato a ' + valoreCampo(limitato) + ' ' + l.unita + ': è il ' + (limitato === l.max ? 'massimo' : 'minimo') + ' consentito.');
       }
-      scrivi(d.percorso, limitato);
+      scrivi(d.percorso, limitato, ctx);
       num.value = valoreCampo(limitato);
       cambiato();
     });
     if (cursore) {
       cursore.addEventListener('input', () => {
-        scrivi(d.percorso, parseFloat(cursore.value));
+        scrivi(d.percorso, parseFloat(cursore.value), ctx);
         cambiato();
       });
     }
     return c;
   }
 
-  function creaSelezione(d) {
+  function creaSelezione(d, ctx) {
     const id = prossimoId();
     const nodo = el('div', 'campo');
     const etichetta = el('label', null, d.etichetta);
@@ -235,18 +213,18 @@
       sel.appendChild(o);
     }
     nodo.append(etichetta, sel);
-    const c = base(d, nodo);
+    const c = base(d, nodo, ctx);
     descrivi(c, sel);
-    c.sincronizza = function () { sel.value = leggi(d.percorso); };
+    c.sincronizza = function () { sel.value = leggi(d.percorso, ctx); };
     sel.addEventListener('change', () => {
-      if (d.prima) d.prima(sel.value);
-      scrivi(d.percorso, sel.value);
+      if (d.prima) d.prima(sel.value, ctx);
+      scrivi(d.percorso, sel.value, ctx);
       cambiato();
     });
     return c;
   }
 
-  function creaRadio(d) {
+  function creaRadio(d, ctx) {
     const id = prossimoId();
     const nodo = el('div', 'campo');
     const etichetta = el('span', d.etichettaNascosta ? 'visivamente-nascosto' : 'etichetta', d.etichetta);
@@ -273,42 +251,42 @@
       ingressi.push(inp);
       inp.addEventListener('change', () => {
         if (!inp.checked) return;
-        if (d.prima) d.prima(v);
-        scrivi(d.percorso, v);
+        if (d.prima) d.prima(v, ctx);
+        scrivi(d.percorso, v, ctx);
         cambiato();
       });
     }
     nodo.append(etichetta, gruppo);
-    const c = base(d, nodo);
+    const c = base(d, nodo, ctx);
     descrivi(c, ...ingressi);
     c.sincronizza = function () {
-      const corrente = leggi(d.percorso);
+      const corrente = leggi(d.percorso, ctx);
       for (const i of ingressi) i.checked = i.value === corrente;
     };
     return c;
   }
 
-  function creaCasella(d) {
+  function creaCasella(d, ctx) {
     const nodo = el('div', 'campo');
     const lab = el('label', 'casella');
     const inp = el('input');
     inp.type = 'checkbox';
     lab.append(inp, el('span', null, ''));
     nodo.appendChild(lab);
-    const c = base(d, nodo);
+    const c = base(d, nodo, ctx);
     descrivi(c, inp);
     c.sincronizza = function () {
-      lab.lastChild.textContent = testo(d.etichetta, stato);
-      inp.checked = !!leggi(d.percorso);
+      lab.lastChild.textContent = testo(d.etichetta, stato, ctx);
+      inp.checked = !!leggi(d.percorso, ctx);
     };
     inp.addEventListener('change', () => {
-      scrivi(d.percorso, inp.checked);
+      scrivi(d.percorso, inp.checked, ctx);
       cambiato();
     });
     return c;
   }
 
-  function creaTesto(d) {
+  function creaTesto(d, ctx) {
     const id = prossimoId();
     const nodo = el('div', 'campo');
     const etichetta = el('label', null, d.etichetta);
@@ -320,14 +298,14 @@
     inp.autocomplete = 'off';
     inp.spellcheck = false;
     nodo.append(etichetta, inp);
-    const c = base(d, nodo);
+    const c = base(d, nodo, ctx);
     descrivi(c, inp);
     c.campo = inp;
     c.sincronizza = function () {
-      if (document.activeElement !== inp) inp.value = leggi(d.percorso);
+      if (document.activeElement !== inp) inp.value = leggi(d.percorso, ctx);
     };
     inp.addEventListener('input', () => {
-      scrivi(d.percorso, inp.value);
+      scrivi(d.percorso, inp.value, ctx);
     });
     return c;
   }
@@ -337,122 +315,32 @@
     'righe-verticali': 'Righe verticali', 'bianco': 'Bianco'
   };
 
-  // Elenco di zone e divisioni, scelta singola: serve a selezionare anche da tastiera.
-  // Si ricostruisce solo quando cambia la struttura, così il focus non si perde.
-  function creaStruttura(d) {
-    const id = prossimoId();
-    const nodo = el('div', 'campo');
-    const etichetta = el('span', 'etichetta', 'Zone e divisioni');
-    etichetta.id = id + '-etichetta';
-    const gruppo = el('div', 'struttura');
-    gruppo.setAttribute('role', 'group');
-    gruppo.setAttribute('aria-labelledby', etichetta.id);
-    nodo.append(etichetta, gruppo);
-    let firma = '';
-    let voci = [];
-
-    const c = base(d, nodo);
-    c.sincronizza = function () {
-      const elenco = L.elencaNodi(stato.layout);
-      const nuova = elenco.map((v) => v.id).join(',');
-      if (nuova !== firma) {
-        const aveva = gruppo.contains(document.activeElement);
-        firma = nuova;
-        gruppo.replaceChildren();
-        voci = elenco.map((v) => {
-          const voceEl = el('div', 'voce ' + v.tipo);
-          voceEl.style.setProperty('--livello', String(Math.min(v.profondita, 6)));
-          const lab = el('label', 'voce-selezione');
-          const inp = el('input');
-          inp.type = 'radio';
-          inp.name = id;
-          inp.value = v.id;
-          const corpo = el('span', 'voce-corpo');
-          const titolo = el('span', 'voce-titolo', v.etichetta);
-          const dettaglio = el('span', 'voce-dettaglio');
-          corpo.append(titolo, dettaglio);
-          lab.append(inp, corpo);
-          voceEl.appendChild(lab);
-          inp.addEventListener('change', () => {
-            if (inp.checked) cambiaSelezione({ tipo: v.tipo, id: v.id });
-          });
-          // La X in alto a destra toglie la zona (non esiste per le divisioni né per l'unica zona).
-          let chiudi = null;
-          if (v.tipo === 'zona' && elenco.length > 1) {
-            chiudi = el('button', 'voce-chiudi', '×');
-            chiudi.type = 'button';
-            chiudi.setAttribute('aria-label', 'Elimina ' + v.etichetta);
-            chiudi.title = 'Elimina ' + v.etichetta + ' (la zona accanto prende il suo posto)';
-            chiudi.addEventListener('click', () => eliminaZona(v.id));
-            voceEl.appendChild(chiudi);
-          }
-          gruppo.appendChild(voceEl);
-          return { id: v.id, inp, dettaglio, titolo, chiudi, etichettaNodo: v.etichetta };
-        });
-        if (aveva) {
-          const scelto = voci.find((x) => x.id === selezione.id);
-          if (scelto) scelto.inp.focus();
-        }
-      }
-      for (const v of elenco) {
-        const voce = voci.find((x) => x.id === v.id);
-        voce.titolo.textContent = v.etichetta;
-        if (voce.chiudi && voce.etichettaNodo !== v.etichetta) {
-          voce.etichettaNodo = v.etichetta;
-          voce.chiudi.setAttribute('aria-label', 'Elimina ' + v.etichetta);
-          voce.chiudi.title = 'Elimina ' + v.etichetta + ' (la zona accanto prende il suo posto)';
-        }
-        voce.inp.checked = v.id === selezione.id;
-        voce.inp.disabled = false;
-      }
-    };
-    // Dettagli (misure, motivo): dipendono dal foglio calcolato.
-    c.dettagli = function (foglio) {
-      for (const voce of voci) {
-        const nodoLayout = L.trovaNodo(stato.layout, voce.id);
-        if (!nodoLayout) continue;
-        let testoDettaglio = '';
-        if (nodoLayout.tipo === 'zona') {
-          const z = foglio.zone.find((x) => x.id === voce.id);
-          testoDettaglio = (z ? M.formattaIt(z.rettangolo.w) + ' × ' + M.formattaIt(z.rettangolo.h) + ' mm · ' : '') +
-            (NOMI_MOTIVI[nodoLayout.impostazioni.motivo] || '');
-        } else {
-          const dv = foglio.divisioni.find((x) => x.id === voce.id);
-          testoDettaglio = 'Linea ' + nodoLayout.direzione + (dv ? ' a ' + M.formattaIt(dv.posizioneMm) + ' mm' : '');
-        }
-        voce.dettaglio.textContent = testoDettaglio;
-      }
-    };
-    return c;
-  }
-
-  function creaPulsante(d) {
+  function creaPulsante(d, ctx) {
     const nodo = el('div', 'campo');
     const b = el('button', 'pulsante secondario');
     b.type = 'button';
     nodo.appendChild(b);
-    const c = base(d, nodo);
+    const c = base(d, nodo, ctx);
     descrivi(c, b);
-    c.sincronizza = function () { b.textContent = testo(d.etichetta, stato); };
-    b.addEventListener('click', () => d.azione());
+    c.sincronizza = function () { b.textContent = testo(d.etichetta, stato, ctx); };
+    b.addEventListener('click', () => d.azione(ctx));
     return c;
   }
 
-  function creaNota(d) {
+  function creaNota(d, ctx) {
     const nodo = el('p', 'nota nota-fissa', d.testo);
-    return { d, nodo, aggiorna() { nodo.hidden = d.visibile ? !d.visibile(stato) : false; } };
+    return { d, nodo, aggiorna() { nodo.hidden = d.visibile ? !d.visibile(stato, ctx) : false; } };
   }
 
-  function creaControllo(d) {
+  function creaControllo(d, ctx) {
     switch (d.tipo) {
-      case 'numero': return creaNumero(d);
-      case 'selezione': return creaSelezione(d);
-      case 'radio': return creaRadio(d);
-      case 'casella': return creaCasella(d);
-      case 'testo': return creaTesto(d);
-      case 'struttura': return creaStruttura(d);
-      case 'pulsante': return creaPulsante(d);
-      default: return creaNota(d);
+      case 'numero': return creaNumero(d, ctx);
+      case 'selezione': return creaSelezione(d, ctx);
+      case 'radio': return creaRadio(d, ctx);
+      case 'casella': return creaCasella(d, ctx);
+      case 'testo': return creaTesto(d, ctx);
+      case 'pulsante': return creaPulsante(d, ctx);
+      default: return creaNota(d, ctx);
     }
   }
 
@@ -470,19 +358,23 @@
     nota: '100% è nero, 0% è bianco.'
   });
 
-  function etichettaNodo(id) {
-    const v = L.elencaNodi(stato.layout).find((x) => x.id === id);
-    return v ? v.etichetta : '';
-  }
+  // Ogni blocco (zona o divisione) ha un contesto {id}: i percorsi «zona.» e «divisione.» valgono per quel nodo.
+  const nodoDi = (c) => L.trovaNodo(stato.layout, c.id);
+  const impDi = (c) => nodoDi(c).impostazioni;
+  const motivoDi = (c) => impDi(c).motivo;
+  const motivoTra = (...elenco) => (s, c) => elenco.indexOf(motivoDi(c)) !== -1;
+  const dueAssi = (c) => M.MOTIVI_DUE_PASSI.indexOf(motivoDi(c)) !== -1;
+  const piuZone = () => M.contaZone(stato.layout) > 1;
+  const divDi = (c) => nodoDi(c);
 
-  function lunghezzaDivisione() {
-    const dv = ultimo && ultimo.divisioni ? ultimo.divisioni.find((x) => x.id === selezione.id) : null;
+  function lunghezzaDivisione(c) {
+    const dv = ultimo && ultimo.divisioni ? ultimo.divisioni.find((x) => x.id === c.id) : null;
     return dv ? Math.min(M.LIMITI.posizioneMm.max, Math.round(dv.lunghezza * 100) / 100) : M.LIMITI.posizioneMm.max;
   }
 
   // Cambiando unità la linea resta dov'è: il valore viene convertito.
-  function convertiPosizione(nuova) {
-    const div = divisioneCorrente();
+  function convertiPosizione(nuova, c) {
+    const div = divDi(c);
     if (!div || div.posizione.unita === nuova) return;
     const dv = ultimo && ultimo.divisioni ? ultimo.divisioni.find((x) => x.id === div.id) : null;
     if (!dv || !(dv.lunghezza > 0)) return;
@@ -492,32 +384,34 @@
     div.posizione.valore = Math.round(Math.min(massimo, Math.max(0, convertito)) * 100) / 100;
   }
 
-  function cambiaSelezione(nuova) {
-    selezione = nuova;
-    if (nuova.tipo === 'zona') ultimaZonaId = nuova.id;
-    aggiornaControlli();
-    if (ultimo && !ultimo.errore) A.evidenzia(foglioEl, ultimo, selezione, { dividi: modoDividi });
+  // ---- azioni sulla struttura delle zone
+
+  // Chiude tutti i blocchi tranne uno (quello appena creato).
+  function apriSolo(id) {
+    for (const b of blocchi) impostaAperto(b, false);
+    aperti.set(id, true);
   }
 
-  function dividi(direzione) {
-    const zona = zonaCorrente();
-    const r = L.dividiZona(stato, zona.id, direzione);
+  function focusBlocco(id) {
+    const b = blocchi.find((x) => x.id === id) || blocchi[0];
+    if (b) b.btn.focus();
+  }
+
+  function dividi(idZona, direzione) {
+    const r = L.dividiZona(stato, idZona, direzione);
     if (!r) return;
-    ultimaZonaId = zona.id;
-    selezione = { tipo: 'divisione', id: r.divisione.id };
-    annuncia('Foglio diviso: ora ci sono ' + M.contaZone(stato.layout) + ' zone. Sono selezionate le impostazioni della divisione.');
+    apriSolo(r.divisione.id);
+    annuncia('Zona divisa: ora ci sono ' + M.contaZone(stato.layout) + ' zone. È aperto il blocco della nuova divisione.');
     cambiato();
+    focusBlocco(r.divisione.id);
   }
 
-  function unisci() {
-    const div = divisioneCorrente();
-    if (!div) return;
-    const zona = L.unisciDivisione(stato, div.id);
+  function unisci(idDivisione) {
+    const zona = L.unisciDivisione(stato, idDivisione);
     if (!zona) return;
-    selezione = { tipo: 'zona', id: zona.id };
-    ultimaZonaId = zona.id;
     annuncia('Zone unite: ora ci sono ' + M.contaZone(stato.layout) + ' zone.');
     cambiato();
+    focusBlocco(zona.id);
   }
 
   // Toglie una zona: quella accanto occupa il suo spazio. Le altre zone non cambiano.
@@ -525,27 +419,154 @@
     const v = L.elencaNodi(stato.layout).find((x) => x.id === id);
     const rimasto = L.eliminaZona(stato, id);
     if (!rimasto) return;
-    const prima = L.primaFoglia(rimasto);
-    selezione = { tipo: 'zona', id: prima.id };
-    ultimaZonaId = prima.id;
     const ora = M.contaZone(stato.layout);
     annuncia((v ? v.etichetta : 'Zona') + ' eliminata: ' + (ora > 1 ? 'ora ci sono ' + ora + ' zone.' : 'il foglio è di nuovo una sola zona.'));
     cambiato();
-    // Il pulsante premuto non esiste più: il focus passa alla voce selezionata (o al primo comando).
-    const scelto = contenitoreSezioni.querySelector('.struttura input:checked');
-    if (scelto && scelto.offsetParent) scelto.focus();
-    else {
-      const prossimo = contenitoreSezioni.querySelector('.sezione:not([hidden]) button');
-      if (prossimo) prossimo.focus();
+    focusBlocco(L.primaFoglia(rimasto).id);
+  }
+
+  // ---- descrittori dei blocchi
+
+  const ZONA_SEZIONI = [
+    {
+      titolo: 'Motivo',
+      campi: [
+        {
+          tipo: 'radio', percorso: 'zona.motivo', etichetta: 'Motivo della zona', etichettaNascosta: true, classe: 'motivi',
+          opzioni: [
+            ['puntini', 'Puntini', 'mini-puntini'],
+            ['righe-orizzontali', 'Righe orizzontali', 'mini-righe-o'],
+            ['quadretti', 'Quadretti', 'mini-quadretti'],
+            ['righe-verticali', 'Righe verticali', 'mini-righe-v'],
+            ['bianco', 'Bianco', 'mini-bianco']
+          ]
+        }
+      ]
+    },
+    {
+      titolo: 'Passo',
+      visibile: (s, c) => motivoDi(c) !== 'bianco',
+      campi: [
+        {
+          tipo: 'numero', percorso: 'zona.passoX', unita: 'mm', min: M.LIMITI.passo.min, max: M.LIMITI.passo.max, passo: 0.1,
+          minCursore: 2, maxCursore: 20, passoCursore: 0.1,
+          etichetta: (s, c) => (motivoDi(c) === 'righe-verticali' ? 'Distanza tra le righe' : dueAssi(c) && impDi(c).passoUguale ? 'Passo' : 'Passo orizzontale'),
+          visibile: motivoTra('puntini', 'quadretti', 'righe-verticali')
+        },
+        { tipo: 'casella', percorso: 'zona.passoUguale', etichetta: 'Passo verticale uguale all’orizzontale', visibile: motivoTra('puntini', 'quadretti') },
+        {
+          tipo: 'numero', percorso: 'zona.passoY', unita: 'mm', min: M.LIMITI.passo.min, max: M.LIMITI.passo.max, passo: 0.1,
+          minCursore: 2, maxCursore: 20, passoCursore: 0.1,
+          etichetta: (s, c) => (motivoDi(c) === 'righe-orizzontali' ? 'Distanza tra le righe' : 'Passo verticale'),
+          visibile: (s, c) => motivoDi(c) === 'righe-orizzontali' || (dueAssi(c) && !impDi(c).passoUguale)
+        }
+      ]
+    },
+    {
+      titolo: 'Linee',
+      visibile: motivoTra('righe-orizzontali', 'quadretti', 'righe-verticali'),
+      campi: [
+        { tipo: 'numero', percorso: 'zona.spessore', etichetta: 'Spessore', unita: 'mm', min: M.LIMITI.spessore.min, max: M.LIMITI.spessore.max, passo: 0.01, minCursore: 0.05, maxCursore: 1, passoCursore: 0.01 },
+        intensita('zona.intensitaLinee'),
+        { tipo: 'selezione', percorso: 'zona.stileLinea', etichetta: 'Stile', opzioni: [['continua', 'Continua'], ['tratteggiata', 'Tratteggiata'], ['puntini', 'A puntini']] },
+        { tipo: 'numero', percorso: 'zona.tratto', etichetta: 'Lunghezza del tratto', unita: 'mm', min: M.LIMITI.tratto.min, max: M.LIMITI.tratto.max, passo: 0.1, minCursore: 0.5, maxCursore: 10, passoCursore: 0.1, visibile: (s, c) => impDi(c).stileLinea === 'tratteggiata' },
+        {
+          tipo: 'numero', percorso: 'zona.spazio', unita: 'mm', min: M.LIMITI.spazio.min, max: M.LIMITI.spazio.max, passo: 0.1, minCursore: 0.2, maxCursore: 10, passoCursore: 0.1,
+          etichetta: (s, c) => (impDi(c).stileLinea === 'puntini' ? 'Distanza tra i puntini' : 'Spazio tra i tratti'),
+          visibile: (s, c) => impDi(c).stileLinea !== 'continua'
+        }
+      ]
+    },
+    {
+      titolo: 'Puntini',
+      visibile: motivoTra('puntini'),
+      campi: [
+        { tipo: 'radio', percorso: 'zona.formaPunto', etichetta: 'Forma', opzioni: [['tondo', 'Tondi'], ['quadrato', 'Quadrati']] },
+        { tipo: 'numero', percorso: 'zona.dimPunto', etichetta: 'Dimensione', unita: 'mm', min: M.LIMITI.dimPunto.min, max: M.LIMITI.dimPunto.max, passo: 0.05, minCursore: 0.2, maxCursore: 2, passoCursore: 0.05 },
+        intensita('zona.intensitaPunti')
+      ]
+    },
+    {
+      titolo: 'Dividi questa zona',
+      campi: [
+        {
+          tipo: 'pulsante', azione: (c) => dividi(c.id, 'verticale'),
+          etichetta: 'Dividi con una linea verticale',
+          nota: 'Due zone affiancate, una a sinistra e una a destra.'
+        },
+        {
+          tipo: 'pulsante', azione: (c) => dividi(c.id, 'orizzontale'),
+          etichetta: 'Dividi con una linea orizzontale',
+          nota: 'Due zone una sopra l’altra.'
+        }
+      ]
     }
-  }
+  ];
 
-  function selezionaGenitore() {
-    const g = L.trovaGenitore(stato.layout, zonaCorrente().id);
-    if (g) cambiaSelezione({ tipo: 'divisione', id: g.id });
-  }
+  const DIVISIONE_SEZIONI = [
+    {
+      titolo: null,
+      campi: [
+        {
+          tipo: 'radio', percorso: 'divisione.direzione', etichetta: 'Direzione della linea',
+          opzioni: [['verticale', 'Verticale (zone affiancate)'], ['orizzontale', 'Orizzontale (zone sovrapposte)']]
+        },
+        {
+          tipo: 'radio', percorso: 'divisione.posizione.unita', etichetta: 'Posizione misurata in',
+          opzioni: [['%', 'Percentuale'], ['mm', 'Millimetri']],
+          prima: (nuova, c) => convertiPosizione(nuova, c)
+        },
+        {
+          tipo: 'numero', percorso: 'divisione.posizione.valore', passo: 0.1, passoCursore: 0.5,
+          etichetta: (s, c) => (divDi(c).direzione === 'verticale' ? 'Posizione dal lato sinistro' : 'Posizione dal lato superiore'),
+          unita: (s, c) => divDi(c).posizione.unita,
+          min: 0, minCursore: 0,
+          max: (s, c) => (divDi(c).posizione.unita === '%' ? 100 : lunghezzaDivisione(c)),
+          maxCursore: (s, c) => (divDi(c).posizione.unita === '%' ? 100 : lunghezzaDivisione(c)),
+          nota: 'Se una zona risulterebbe più stretta di ' + M.MIN_ZONA + ' mm la linea viene spostata e comparirà un avviso.'
+        },
+        {
+          tipo: 'numero', percorso: 'divisione.spazio', etichetta: 'Spazio tra le due zone', unita: 'mm',
+          min: M.LIMITI.spazioZone.min, max: M.LIMITI.spazioZone.max, passo: 0.1,
+          minCursore: 0, maxCursore: 20, passoCursore: 0.5,
+          nota: 'Fascia lasciata libera attorno alla linea: le griglie delle due zone partono ai suoi lati.'
+        },
+        {
+          tipo: 'casella', percorso: 'divisione.linea.visibile', etichetta: 'Stampa questa linea nel PDF',
+          nota: (s, c) => (divDi(c).linea.visibile ? '' : 'La linea non viene stampata: resta nell’anteprima come guida tratteggiata.')
+        },
+        {
+          tipo: 'numero', percorso: 'divisione.linea.spessore', etichetta: 'Spessore della linea', unita: 'mm',
+          min: M.LIMITI.spessore.min, max: M.LIMITI.spessore.max, passo: 0.01, minCursore: 0.05, maxCursore: 1, passoCursore: 0.01,
+          visibile: (s, c) => divDi(c).linea.visibile
+        },
+        { ...intensita('divisione.linea.intensita'), etichetta: 'Intensità del grigio della linea', visibile: (s, c) => divDi(c).linea.visibile },
+        {
+          tipo: 'selezione', percorso: 'divisione.linea.stile', etichetta: 'Stile della linea',
+          opzioni: [['continua', 'Continua'], ['tratteggiata', 'Tratteggiata'], ['puntini', 'A puntini']],
+          visibile: (s, c) => divDi(c).linea.visibile
+        },
+        {
+          tipo: 'numero', percorso: 'divisione.linea.tratto', etichetta: 'Lunghezza del tratto', unita: 'mm',
+          min: M.LIMITI.tratto.min, max: M.LIMITI.tratto.max, passo: 0.1, minCursore: 0.5, maxCursore: 10, passoCursore: 0.1,
+          visibile: (s, c) => divDi(c).linea.visibile && divDi(c).linea.stile === 'tratteggiata'
+        },
+        {
+          tipo: 'numero', percorso: 'divisione.linea.spazio', unita: 'mm',
+          min: M.LIMITI.spazio.min, max: M.LIMITI.spazio.max, passo: 0.1, minCursore: 0.2, maxCursore: 10, passoCursore: 0.1,
+          etichetta: (s, c) => (divDi(c).linea.stile === 'puntini' ? 'Distanza tra i puntini' : 'Spazio tra i tratti'),
+          visibile: (s, c) => divDi(c).linea.visibile && divDi(c).linea.stile !== 'continua'
+        },
+        {
+          tipo: 'pulsante', azione: (c) => unisci(c.id),
+          etichetta: 'Unisci le due parti in una zona',
+          nota: 'Resta una sola zona con le impostazioni della prima; le altre zone di questa divisione vengono eliminate.'
+        }
+      ]
+    }
+  ];
 
-  const DESCRITTORI = [
+  const DESCRITTORI_INIZIO = [
     {
       titolo: 'Foglio',
       campi: [
@@ -594,145 +615,10 @@
           }
         }
       ]
-    },
-    {
-      titolo: 'Zone',
-      campi: [
-        { tipo: 'nota', testo: 'Dividi il foglio con una linea verticale o orizzontale. Ogni zona ha il suo motivo e le sue misure; puoi dividere ancora una zona per ottenere croci e griglie di zone.' },
-        { tipo: 'struttura', visibile: piuZone },
-        {
-          tipo: 'pulsante', azione: () => dividi('verticale'),
-          etichetta: () => (piuZone() ? 'Dividi' + suffissoZona().replace(' — ', ' ').toLowerCase() + ' con una linea verticale' : 'Dividi con una linea verticale'),
-          nota: 'Due zone affiancate, una a sinistra e una a destra.'
-        },
-        {
-          tipo: 'pulsante', azione: () => dividi('orizzontale'),
-          etichetta: () => (piuZone() ? 'Dividi' + suffissoZona().replace(' — ', ' ').toLowerCase() + ' con una linea orizzontale' : 'Dividi con una linea orizzontale'),
-          nota: 'Due zone una sopra l’altra.'
-        },
-        {
-          tipo: 'pulsante', azione: () => selezionaGenitore(),
-          etichetta: () => 'Seleziona la divisione di ' + suffissoZona().replace(' — ', '').toLowerCase(),
-          visibile: () => selezione.tipo === 'zona' && !!L.trovaGenitore(stato.layout, zonaCorrente().id)
-        }
-      ]
-    },
-    {
-      titolo: () => 'Divisione' + (divisioneCorrente() ? ' — ' + etichettaNodo(divisioneCorrente().id) : ''),
-      visibile: () => !!divisioneCorrente(),
-      campi: [
-        {
-          tipo: 'radio', percorso: 'divisione.direzione', etichetta: 'Direzione della linea',
-          opzioni: [['verticale', 'Verticale (zone affiancate)'], ['orizzontale', 'Orizzontale (zone sovrapposte)']]
-        },
-        {
-          tipo: 'radio', percorso: 'divisione.posizione.unita', etichetta: 'Posizione misurata in',
-          opzioni: [['%', 'Percentuale'], ['mm', 'Millimetri']],
-          prima: convertiPosizione
-        },
-        {
-          tipo: 'numero', percorso: 'divisione.posizione.valore', passo: 0.1, passoCursore: 0.5,
-          etichetta: () => (divisioneCorrente().direzione === 'verticale' ? 'Posizione dal lato sinistro' : 'Posizione dal lato superiore'),
-          unita: () => divisioneCorrente().posizione.unita,
-          min: 0, minCursore: 0,
-          max: () => (divisioneCorrente().posizione.unita === '%' ? 100 : lunghezzaDivisione()),
-          maxCursore: () => (divisioneCorrente().posizione.unita === '%' ? 100 : lunghezzaDivisione()),
-          nota: 'Se una zona risulterebbe più stretta di ' + M.MIN_ZONA + ' mm la linea viene spostata e comparirà un avviso.'
-        },
-        {
-          tipo: 'numero', percorso: 'divisione.spazio', etichetta: 'Spazio tra le due zone', unita: 'mm',
-          min: M.LIMITI.spazioZone.min, max: M.LIMITI.spazioZone.max, passo: 0.1,
-          minCursore: 0, maxCursore: 20, passoCursore: 0.5,
-          nota: 'Fascia lasciata libera attorno alla linea: le griglie delle due zone partono ai suoi lati.'
-        },
-        { tipo: 'casella', percorso: 'divisione.linea.visibile', etichetta: 'Disegna la linea di divisione' },
-        {
-          tipo: 'numero', percorso: 'divisione.linea.spessore', etichetta: 'Spessore della linea', unita: 'mm',
-          min: M.LIMITI.spessore.min, max: M.LIMITI.spessore.max, passo: 0.01, minCursore: 0.05, maxCursore: 1, passoCursore: 0.01,
-          visibile: () => divisioneCorrente().linea.visibile
-        },
-        { ...intensita('divisione.linea.intensita'), etichetta: 'Intensità del grigio della linea', visibile: () => divisioneCorrente().linea.visibile },
-        {
-          tipo: 'selezione', percorso: 'divisione.linea.stile', etichetta: 'Stile della linea',
-          opzioni: [['continua', 'Continua'], ['tratteggiata', 'Tratteggiata'], ['puntini', 'A puntini']],
-          visibile: () => divisioneCorrente().linea.visibile
-        },
-        {
-          tipo: 'numero', percorso: 'divisione.linea.tratto', etichetta: 'Lunghezza del tratto', unita: 'mm',
-          min: M.LIMITI.tratto.min, max: M.LIMITI.tratto.max, passo: 0.1, minCursore: 0.5, maxCursore: 10, passoCursore: 0.1,
-          visibile: () => divisioneCorrente().linea.visibile && divisioneCorrente().linea.stile === 'tratteggiata'
-        },
-        {
-          tipo: 'numero', percorso: 'divisione.linea.spazio', unita: 'mm',
-          min: M.LIMITI.spazio.min, max: M.LIMITI.spazio.max, passo: 0.1, minCursore: 0.2, maxCursore: 10, passoCursore: 0.1,
-          etichetta: () => (divisioneCorrente().linea.stile === 'puntini' ? 'Distanza tra i puntini' : 'Spazio tra i tratti'),
-          visibile: () => divisioneCorrente().linea.visibile && divisioneCorrente().linea.stile !== 'continua'
-        },
-        {
-          tipo: 'pulsante', azione: () => unisci(),
-          etichetta: 'Unisci le due parti in una zona',
-          nota: 'Resta una sola zona con le impostazioni della prima; le altre zone di questa divisione vengono eliminate.'
-        }
-      ]
-    },
-    {
-      titolo: () => 'Motivo' + suffissoZona(),
-      campi: [
-        {
-          tipo: 'radio', percorso: 'zona.motivo', etichetta: 'Motivo del foglio', etichettaNascosta: true, classe: 'motivi',
-          opzioni: [
-            ['puntini', 'Puntini', 'mini-puntini'],
-            ['righe-orizzontali', 'Righe orizzontali', 'mini-righe-o'],
-            ['quadretti', 'Quadretti', 'mini-quadretti'],
-            ['righe-verticali', 'Righe verticali', 'mini-righe-v'],
-            ['bianco', 'Bianco', 'mini-bianco']
-          ]
-        }
-      ]
-    },
-    {
-      titolo: () => 'Passo' + suffissoZona(),
-      visibile: () => motivo() !== 'bianco',
-      campi: [
-        {
-          tipo: 'numero', percorso: 'zona.passoX', unita: 'mm', min: M.LIMITI.passo.min, max: M.LIMITI.passo.max, passo: 0.1,
-          minCursore: 2, maxCursore: 20, passoCursore: 0.1,
-          etichetta: () => (motivo() === 'righe-verticali' ? 'Distanza tra le righe' : dueAssi() && impostazioni().passoUguale ? 'Passo' : 'Passo orizzontale'),
-          visibile: motivoTra('puntini', 'quadretti', 'righe-verticali')
-        },
-        { tipo: 'casella', percorso: 'zona.passoUguale', etichetta: 'Passo verticale uguale all’orizzontale', visibile: motivoTra('puntini', 'quadretti') },
-        {
-          tipo: 'numero', percorso: 'zona.passoY', unita: 'mm', min: M.LIMITI.passo.min, max: M.LIMITI.passo.max, passo: 0.1,
-          minCursore: 2, maxCursore: 20, passoCursore: 0.1,
-          etichetta: () => (motivo() === 'righe-orizzontali' ? 'Distanza tra le righe' : 'Passo verticale'),
-          visibile: () => motivo() === 'righe-orizzontali' || (dueAssi() && !impostazioni().passoUguale)
-        }
-      ]
-    },
-    {
-      titolo: () => 'Linee' + suffissoZona(),
-      visibile: motivoTra('righe-orizzontali', 'quadretti', 'righe-verticali'),
-      campi: [
-        { tipo: 'numero', percorso: 'zona.spessore', etichetta: 'Spessore', unita: 'mm', min: M.LIMITI.spessore.min, max: M.LIMITI.spessore.max, passo: 0.01, minCursore: 0.05, maxCursore: 1, passoCursore: 0.01 },
-        intensita('zona.intensitaLinee'),
-        { tipo: 'selezione', percorso: 'zona.stileLinea', etichetta: 'Stile', opzioni: [['continua', 'Continua'], ['tratteggiata', 'Tratteggiata'], ['puntini', 'A puntini']] },
-        { tipo: 'numero', percorso: 'zona.tratto', etichetta: 'Lunghezza del tratto', unita: 'mm', min: M.LIMITI.tratto.min, max: M.LIMITI.tratto.max, passo: 0.1, minCursore: 0.5, maxCursore: 10, passoCursore: 0.1, visibile: () => impostazioni().stileLinea === 'tratteggiata' },
-        {
-          tipo: 'numero', percorso: 'zona.spazio', unita: 'mm', min: M.LIMITI.spazio.min, max: M.LIMITI.spazio.max, passo: 0.1, minCursore: 0.2, maxCursore: 10, passoCursore: 0.1,
-          etichetta: () => (impostazioni().stileLinea === 'puntini' ? 'Distanza tra i puntini' : 'Spazio tra i tratti'),
-          visibile: () => impostazioni().stileLinea !== 'continua'
-        }
-      ]
-    },
-    {
-      titolo: () => 'Puntini' + suffissoZona(),
-      visibile: motivoTra('puntini'),
-      campi: [
-        { tipo: 'radio', percorso: 'zona.formaPunto', etichetta: 'Forma', opzioni: [['tondo', 'Tondi'], ['quadrato', 'Quadrati']] },
-        { tipo: 'numero', percorso: 'zona.dimPunto', etichetta: 'Dimensione', unita: 'mm', min: M.LIMITI.dimPunto.min, max: M.LIMITI.dimPunto.max, passo: 0.05, minCursore: 0.2, maxCursore: 2, passoCursore: 0.05 },
-        intensita('zona.intensitaPunti')
-      ]
-    },
+    }
+  ];
+
+  const DESCRITTORI_FINE = [
     {
       titolo: 'Stampa',
       campi: [
@@ -744,7 +630,7 @@
   ];
 
   let campoNome = null;
-  for (const dSez of DESCRITTORI) {
+  function creaSezioneGlobale(dSez) {
     const nodo = el('fieldset', 'sezione');
     const legenda = el('legend', null, testo(dSez.titolo, stato));
     nodo.appendChild(legenda);
@@ -758,13 +644,174 @@
     contenitoreSezioni.appendChild(nodo);
     sezioni.push({ d: dSez, nodo, controlli, legenda });
   }
+  DESCRITTORI_INIZIO.forEach(creaSezioneGlobale);
+
+  // ---- sezione «Zone»: un blocco per ogni zona e per ogni divisione
+
+  const zoneEl = el('fieldset', 'sezione sezione-zone');
+  zoneEl.appendChild(el('legend', null, 'Zone'));
+  zoneEl.appendChild(el('p', 'nota nota-fissa', 'Dividi il foglio con una linea verticale o orizzontale. Ogni zona ha il suo blocco con motivo e misure; ogni linea di divisione ha il suo. Puoi dividere ancora una zona per ottenere croci e griglie di zone.'));
+  const barraBlocchi = el('div', 'barra-blocchi');
+  const bApriTutti = el('button', 'pulsante secondario piccolo', 'Apri tutti');
+  const bChiudiTutti = el('button', 'pulsante secondario piccolo', 'Chiudi tutti');
+  bApriTutti.type = bChiudiTutti.type = 'button';
+  barraBlocchi.append(bApriTutti, bChiudiTutti);
+  const blocchiEl = el('div', 'blocchi');
+  zoneEl.append(barraBlocchi, blocchiEl);
+  contenitoreSezioni.appendChild(zoneEl);
+  bApriTutti.addEventListener('click', () => { for (const b of blocchi) impostaAperto(b, true); annuncia('Tutti i blocchi aperti.'); });
+  bChiudiTutti.addEventListener('click', () => { for (const b of blocchi) impostaAperto(b, false); annuncia('Tutti i blocchi chiusi.'); });
+
+  DESCRITTORI_FINE.forEach(creaSezioneGlobale);
+
+  function impostaAperto(b, aperto) {
+    aperti.set(b.id, aperto);
+    b.corpo.hidden = !aperto;
+    b.btn.setAttribute('aria-expanded', String(aperto));
+    b.nodo.classList.toggle('aperto', aperto);
+  }
+
+  function creaBlocco(v, nZone) {
+    const ctx = { id: v.id, tipo: v.tipo };
+    const nodo = el('div', 'blocco ' + v.tipo);
+    const testa = el('div', 'blocco-testa');
+    const idCorpo = prossimoId();
+    const btn = el('button', 'blocco-titolo');
+    btn.type = 'button';
+    btn.setAttribute('aria-controls', idCorpo);
+    const freccia = el('span', 'freccia', '▸');
+    freccia.setAttribute('aria-hidden', 'true');
+    const nome = el('span', 'blocco-nome', v.etichetta);
+    const riepilogo = el('span', 'blocco-riepilogo');
+    btn.append(freccia, nome, riepilogo);
+    testa.appendChild(btn);
+
+    // La X in alto a destra toglie la zona (non esiste per le divisioni né per l'unica zona).
+    let chiudi = null;
+    if (v.tipo === 'zona' && nZone > 1) {
+      chiudi = el('button', 'voce-chiudi', '×');
+      chiudi.type = 'button';
+      chiudi.addEventListener('click', () => eliminaZona(v.id));
+      testa.appendChild(chiudi);
+    }
+
+    const corpo = el('div', 'blocco-corpo');
+    corpo.id = idCorpo;
+    const parti = [];
+    for (const dSez of v.tipo === 'zona' ? ZONA_SEZIONI : DIVISIONE_SEZIONI) {
+      const sNodo = dSez.titolo ? el('fieldset', 'sottosezione') : el('div', 'sottosezione');
+      if (dSez.titolo) sNodo.appendChild(el('legend', null, dSez.titolo));
+      const controlli = [];
+      for (const dc of dSez.campi) {
+        const c = creaControllo(dc, ctx);
+        sNodo.appendChild(c.nodo);
+        controlli.push(c);
+      }
+      corpo.appendChild(sNodo);
+      parti.push({ d: dSez, nodo: sNodo, controlli });
+    }
+    nodo.append(testa, corpo);
+
+    const b = { id: v.id, tipo: v.tipo, ctx, nodo, btn, nome, riepilogo, corpo, chiudi, parti, etichetta: '' };
+    btn.addEventListener('click', () => impostaAperto(b, b.corpo.hidden));
+    // Collegamento con l'anteprima: sopra il blocco si illumina la zona (o la linea) corrispondente.
+    nodo.addEventListener('pointerenter', () => evidenziaNodo(b.id));
+    nodo.addEventListener('pointerleave', () => evidenziaNodo(null));
+    nodo.addEventListener('focusin', () => evidenziaNodo(b.id));
+    nodo.addEventListener('focusout', () => evidenziaNodo(null));
+    return b;
+  }
+
+  function etichettaBlocco(b, v) {
+    if (b.etichetta === v.etichetta) return;
+    b.etichetta = v.etichetta;
+    b.nome.textContent = v.etichetta;
+    if (b.chiudi) {
+      b.chiudi.setAttribute('aria-label', 'Elimina ' + v.etichetta);
+      b.chiudi.title = 'Elimina ' + v.etichetta + ' (la zona accanto prende il suo posto)';
+    }
+  }
+
+  // Ricostruisce i blocchi solo quando cambia la struttura del foglio (zone e divisioni).
+  function sincronizzaBlocchi() {
+    const ordine = L.ordineVisivo(stato.layout);
+    const nZone = M.contaZone(stato.layout);
+    const firma = nZone + '|' + ordine.map((v) => v.id).join(',');
+    if (firma !== firmaBlocchi) {
+      firmaBlocchi = firma;
+      for (const b of blocchi) aperti.set(b.id, !b.corpo.hidden);
+      blocchi.length = 0;
+      blocchiEl.replaceChildren();
+      for (const v of ordine) {
+        const b = creaBlocco(v, nZone);
+        blocchi.push(b);
+        blocchiEl.appendChild(b.nodo);
+        // Con una sola zona il blocco è aperto; con più zone restano aperti solo quelli scelti.
+        impostaAperto(b, nZone === 1 ? true : aperti.get(v.id) === true);
+      }
+    }
+    barraBlocchi.hidden = nZone < 2;
+    ordine.forEach((v, i) => {
+      const b = blocchi[i];
+      etichettaBlocco(b, v);
+      for (const s of b.parti) {
+        const visibile = s.d.visibile ? s.d.visibile(stato, b.ctx) : true;
+        s.nodo.hidden = !visibile;
+        if (!visibile) continue;
+        for (const c of s.controlli) c.aggiorna();
+      }
+    });
+  }
+
+  // Riepilogo di una riga nell'intestazione del blocco (misure, motivo, posizione della linea).
+  function aggiornaRiepiloghi(foglio) {
+    for (const b of blocchi) {
+      const n = L.trovaNodo(stato.layout, b.id);
+      if (!n) continue;
+      let t = '';
+      if (n.tipo === 'zona') {
+        const z = foglio.zone.find((x) => x.id === b.id);
+        t = (z ? M.formattaIt(z.rettangolo.w) + ' × ' + M.formattaIt(z.rettangolo.h) + ' mm · ' : '') + (NOMI_MOTIVI[n.impostazioni.motivo] || '');
+      } else {
+        const dv = foglio.divisioni.find((x) => x.id === b.id);
+        t = 'Linea ' + n.direzione + (dv ? ' a ' + M.formattaIt(dv.posizioneMm) + ' mm' : '') + (n.linea.visibile ? '' : ' · non stampata');
+      }
+      b.riepilogo.textContent = t;
+    }
+  }
+
+  // Illumina nell'anteprima la zona o la linea del blocco (e viceversa), solo mentre ci si passa sopra.
+  function evidenziaNodo(id) {
+    for (const r of foglioEl.querySelectorAll('.evidenziata')) r.classList.remove('evidenziata');
+    for (const b of blocchi) b.nodo.classList.toggle('evidenziato', b.id === id);
+    if (id && /^[zd]\d+$/.test(id)) {
+      const r = foglioEl.querySelector('[data-nodo="' + id + '"]');
+      if (r) r.classList.add('evidenziata');
+    }
+  }
+
+  function evidenziaNodoBlocco(id) {
+    for (const b of blocchi) b.nodo.classList.toggle('evidenziato', b.id === id);
+  }
+
+  // Clic sull'anteprima: apre il blocco corrispondente, lo porta in vista e lo fa lampeggiare un attimo.
+  function vaiAlBlocco(id) {
+    const b = blocchi.find((x) => x.id === id);
+    if (!b) return;
+    impostaAperto(b, true);
+    const ridotto = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    b.nodo.scrollIntoView({ block: 'nearest', behavior: ridotto ? 'auto' : 'smooth' });
+    b.nodo.classList.remove('lampo');
+    void b.nodo.offsetWidth; // riavvia l'animazione
+    b.nodo.classList.add('lampo');
+    window.setTimeout(() => b.nodo.classList.remove('lampo'), 1400);
+    b.btn.focus({ preventScroll: true });
+    annuncia(b.etichetta + ' aperta.');
+  }
 
   // ------------------------------------------------------------ aggiornamento
 
   function aggiornaControlli() {
-    // La selezione deve sempre indicare un nodo esistente.
-    if (!L.trovaNodo(stato.layout, selezione.id)) selezione = { tipo: 'zona', id: L.primaFoglia(stato.layout).id };
-    if (!L.trovaNodo(stato.layout, ultimaZonaId)) ultimaZonaId = L.primaFoglia(stato.layout).id;
     for (const s of sezioni) {
       const visibile = s.d.visibile ? s.d.visibile(stato) : true;
       s.nodo.hidden = !visibile;
@@ -772,6 +819,7 @@
       s.legenda.textContent = testo(s.d.titolo, stato);
       for (const c of s.controlli) c.aggiorna();
     }
+    sincronizzaBlocchi();
   }
 
   function cambiato() {
@@ -811,7 +859,7 @@
     }
     const c = foglio.colonne;
     const r = foglio.righe;
-    switch (motivo()) {
+    switch (L.primaFoglia(stato.layout).impostazioni.motivo) {
       case 'puntini': return c == null ? 'Puntini.' : (c + 1) + ' × ' + (r + 1) + ' puntini.';
       case 'quadretti': return c == null ? 'Quadretti.' : c + ' × ' + r + ' quadretti.';
       case 'righe-orizzontali': return r == null ? 'Righe orizzontali.' : (r + 1) + ' righe orizzontali.';
@@ -839,8 +887,8 @@
     foglioEl.classList.remove('obsoleto');
     scaricaEl.disabled = false;
 
-    A.mostra(foglioEl, foglio, selezione, { dividi: modoDividi });
-    for (const s of sezioni) for (const c of s.controlli) if (c.dettagli) c.dettagli(foglio);
+    A.mostra(foglioEl, foglio, { dividi: modoDividi });
+    aggiornaRiepiloghi(foglio);
     A.adatta(pianoEl, foglioEl, foglio);
     foglioEl.setAttribute('aria-label', 'Anteprima del foglio: ' + nomeFormato() + ', ' + descrizioneMotivo(foglio));
 
@@ -899,15 +947,13 @@
     const n = nodoSotto(e);
     if (!n) return;
     if (!modoDividi) {
-      cambiaSelezione({ tipo: n.tipo, id: n.id });
+      vaiAlBlocco(n.id);
       return;
     }
     if (n.tipo === 'divisione') {
       const prima = M.contaZone(stato.layout);
       const zona = L.unisciDivisione(stato, n.id);
       if (!zona) return;
-      selezione = { tipo: 'zona', id: zona.id };
-      ultimaZonaId = zona.id;
       annuncia('Linea tolta: zone da ' + prima + ' a ' + M.contaZone(stato.layout) + '.');
     } else {
       const t = taglioPrevisto(n.id, e);
@@ -918,8 +964,7 @@
       }
       const r = L.dividiZona(stato, n.id, direzioneClic, { valore: t.valore, unita: 'mm' });
       if (!r) return;
-      ultimaZonaId = n.id;
-      selezione = { tipo: 'divisione', id: r.divisione.id };
+      apriSolo(r.divisione.id);
       annuncia('Zona divisa a ' + M.formattaIt(t.valore) + ' mm: ora ci sono ' + M.contaZone(stato.layout) + ' zone.');
     }
     A.guida(foglioEl, null);
@@ -928,8 +973,14 @@
 
   // Guida che segue il puntatore: mostra dove cadrebbe la linea (o segnala che un clic la toglie).
   foglioEl.addEventListener('pointermove', (e) => {
-    if (!modoDividi) return;
-    const n = nodoSotto(e);
+    const sotto = nodoSotto(e);
+    if (!modoDividi) {
+      // Il blocco corrispondente si illumina solo mentre il puntatore è sopra la zona o la linea.
+      evidenziaNodoBlocco(sotto ? sotto.id : null);
+      return;
+    }
+    const n = sotto;
+    evidenziaNodoBlocco(n ? n.id : null);
     foglioEl.classList.toggle('su-linea', !!n && n.tipo === 'divisione');
     if (!n || n.tipo !== 'zona') {
       A.guida(foglioEl, null);
@@ -939,6 +990,7 @@
     A.guida(foglioEl, t && t.segmento ? t.segmento : null);
   });
   foglioEl.addEventListener('pointerleave', () => {
+    evidenziaNodoBlocco(null);
     A.guida(foglioEl, null);
     foglioEl.classList.remove('su-linea');
   });
@@ -1029,7 +1081,7 @@
       foglioEl.classList.toggle('modo-dividi', attivo);
       foglioEl.classList.remove('su-linea');
       aggiornaSuggerimento();
-      if (ultimo && !ultimo.errore) A.evidenzia(foglioEl, ultimo, selezione, { dividi: modoDividi });
+      if (ultimo && !ultimo.errore) A.evidenzia(foglioEl, ultimo, { dividi: modoDividi });
       annuncia(attivo ? 'Modalità dividi con il clic attiva.' : 'Modalità dividi con il clic disattivata.');
     }
     casella.addEventListener('change', () => imposta(casella.checked));
@@ -1045,12 +1097,10 @@
 
   // ------------------------------------------------------------ preset e ultima configurazione
 
-  // Sostituisce tutte le impostazioni (da preset, file o ripristino) e riporta la selezione alla prima zona.
+  // Sostituisce tutte le impostazioni (da preset, file o ripristino) e riparte con i blocchi nello stato iniziale.
   function applicaStato(nuovo) {
     Object.assign(stato, nuovo);
-    const prima = L.primaFoglia(stato.layout);
-    selezione = { tipo: 'zona', id: prima.id };
-    ultimaZonaId = prima.id;
+    aperti.clear();
     cambiato();
   }
 
@@ -1250,8 +1300,6 @@
     const ultima = archivio.leggiUltima();
     if (ultima) {
       Object.assign(stato, ultima);
-      selezione = { tipo: 'zona', id: L.primaFoglia(stato.layout).id };
-      ultimaZonaId = selezione.id;
     }
   }
 

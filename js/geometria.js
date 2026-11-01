@@ -192,6 +192,7 @@
       lunghezza,
       posizioneMm: arrotonda(p),
       linea: segmento,
+      stampata: !!nodo.linea.visibile,
       banda
     });
 

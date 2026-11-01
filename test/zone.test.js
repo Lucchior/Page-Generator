@@ -513,3 +513,34 @@ test('dopo eliminare si può dividere ancora senza ripetere identificatori', () 
   const id = L.elencaNodi(s.layout).map((v) => v.id);
   assert.equal(new Set(id).size, id.length);
 });
+
+// ---------------------------------------------------------------- ordine dei blocchi nel pannello
+
+test('ordineVisivo: ogni divisione sta tra le sue due parti', () => {
+  const s = stato();
+  L.dividiZona(s, 'z1', 'verticale');
+  L.dividiZona(s, 'z2', 'orizzontale');
+  assert.deepEqual(L.ordineVisivo(s.layout).map((v) => v.etichetta), ['Zona 1', 'Divisione 1', 'Zona 2', 'Divisione 2', 'Zona 3']);
+  assert.deepEqual(L.ordineVisivo(s.layout).map((v) => v.id), ['z1', 'd1', 'z2', 'd2', 'z3']);
+});
+
+test('ordineVisivo: una sola zona e divisione annidata a sinistra', () => {
+  const s = stato();
+  assert.deepEqual(L.ordineVisivo(s.layout).map((v) => v.id), ['z1']);
+  L.dividiZona(s, 'z1', 'verticale');
+  L.dividiZona(s, 'z1', 'orizzontale');
+  const ordine = L.ordineVisivo(s.layout);
+  assert.equal(ordine.length, 5);
+  assert.equal(new Set(ordine.map((v) => v.id)).size, 5);
+  assert.equal(ordine.filter((v) => v.tipo === 'zona').length, 3);
+});
+
+test('la divisione indica se la linea viene stampata', () => {
+  const { s } = divisoIn2('verticale');
+  assert.equal(G.generaFoglio(s).divisioni[0].stampata, true);
+  s.layout.linea.visibile = false;
+  const f = G.generaFoglio(s);
+  assert.equal(f.divisioni[0].stampata, false);
+  assert.equal(f.elementi.filter((e) => e.tipo === 'linee').length, 0);
+  assert.deepEqual(f.divisioni[0].linea, [105, 10, 105, 287]); // la guida in anteprima resta disponibile
+});
