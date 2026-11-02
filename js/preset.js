@@ -11,6 +11,7 @@
 
   const Fogli = (radice.Fogli = radice.Fogli || {});
   const M = Fogli.modello || (typeof require === 'function' ? require('./modello.js') : null);
+  const L = Fogli.layout || (typeof require === 'function' ? require('./layout.js') : null);
 
   const FORMATO = 'generatore-fogli-preset';
   const VERSIONE = 1;
@@ -60,6 +61,25 @@
     const stato = M.normalizza(dati.impostazioni);
     stato.stampa.nomeFile = '';
     return { stato, nome: sanificaNome(dati.nome) };
+  }
+
+  // Modelli incorporati: non si possono eliminare né modificare, si caricano come un preset.
+  // «Due fogli 145 × 203 su A4»: A4 orizzontale senza margini, due zone da 148,5 mm senza spazio,
+  // ciascuna un foglio aperto 145 × 203 mm da rifilare (finito 140 × 200); la linea di divisione è stampata.
+  function modelloDueFogli() {
+    const s = M.creaStatoIniziale();
+    s.pagina.formato = 'A4';
+    s.pagina.orientamento = 'orizzontale';
+    s.margini.senza = true;
+    L.dividiZona(s, s.layout.id, 'verticale', { valore: 50, unita: '%' });
+    s.layout.spazio = 0;
+    s.layout.linea.visibile = true;
+    for (const z of L.foglie(s.layout)) z.impostazioni.foglio.attivo = true;
+    return M.normalizza(s);
+  }
+
+  function modelli() {
+    return [{ nome: 'Due fogli 145 × 203 su A4', stato: modelloDueFogli() }];
   }
 
   // Archivio nel browser. Ogni operazione restituisce { ok:true, ... } oppure { ok:false, errore }.
@@ -170,7 +190,7 @@
 
   Fogli.preset = {
     FORMATO, VERSIONE, MAX_PRESET, MAX_NOME, CHIAVE_PRESET, CHIAVE_ULTIMA, CHIAVE_TEMA,
-    sanificaNome, creaPreset, leggiPreset, creaArchivio
+    sanificaNome, creaPreset, leggiPreset, creaArchivio, modelli
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = Fogli.preset;

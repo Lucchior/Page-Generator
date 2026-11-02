@@ -47,7 +47,32 @@
     return nodo('path', { d, fill: grigio(el.grigio) });
   }
 
-  function creaSvg(foglio) {
+  // Solo anteprima, mai nel PDF: scarto ombreggiato, bordo del foglio finito e linea di piega.
+  // Con "vistaFinita" lo scarto (e tutto ciò che sta fuori dai fogli finiti) viene nascosto.
+  function disegnaFinito(svg, foglio, vistaFinita) {
+    const finiti = foglio.zone.filter((z) => z.finito);
+    if (!finiti.length) return;
+    const g = nodo('g', { class: 'strato-finito', 'aria-hidden': 'true' });
+    const rett = (r) => 'M' + n(r.x) + ' ' + n(r.y) + 'h' + n(r.w) + 'v' + n(r.h) + 'h' + n(-r.w) + 'z';
+    if (vistaFinita) {
+      let d = rett({ x: 0, y: 0, w: foglio.larghezza, h: foglio.altezza });
+      for (const z of foglio.zone) d += rett(z.finito ? z.finito.finito : z.rettangolo);
+      g.appendChild(nodo('path', { class: 'esterno-finito', d, 'fill-rule': 'evenodd' }));
+    } else {
+      let d = '';
+      for (const z of finiti) d += rett(z.finito.aperto) + rett(z.finito.finito);
+      g.appendChild(nodo('path', { class: 'scarto', d, 'fill-rule': 'evenodd' }));
+    }
+    for (const z of finiti) {
+      const f = z.finito.finito;
+      g.appendChild(nodo('rect', { class: 'bordo-finito', x: n(f.x), y: n(f.y), width: n(f.w), height: n(f.h) }));
+      const p = z.finito.piega;
+      if (p) g.appendChild(nodo('line', { class: 'guida-piega', x1: n(p.x0), y1: n(p.y), x2: n(p.x1), y2: n(p.y) }));
+    }
+    svg.appendChild(g);
+  }
+
+  function creaSvg(foglio, opzioni) {
     const svg = nodo('svg', {
       viewBox: '0 0 ' + n(foglio.larghezza) + ' ' + n(foglio.altezza),
       'aria-hidden': 'true',
@@ -57,6 +82,7 @@
     for (const el of foglio.elementi) {
       svg.appendChild(el.tipo === 'linee' ? disegnaLinee(el) : disegnaPunti(el));
     }
+    if (foglio.zone) disegnaFinito(svg, foglio, !!(opzioni && opzioni.vistaFinita));
     return svg;
   }
 
@@ -107,7 +133,7 @@
   }
 
   function mostra(contenitore, foglio, opzioni) {
-    contenitore.replaceChildren(creaSvg(foglio));
+    contenitore.replaceChildren(creaSvg(foglio, opzioni));
     evidenzia(contenitore, foglio, opzioni);
   }
 

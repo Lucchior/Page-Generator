@@ -38,7 +38,10 @@
     soglia: { min: 0, max: 50 },
     posizionePerc: { min: 0, max: 100 },
     posizioneMm: { min: 0, max: 2000 },
-    spazioZone: { min: 0, max: 100 }
+    spazioZone: { min: 0, max: 100 },
+    rifilo: { min: 0, max: 100 },
+    distanzaFoglio: { min: 0, max: 100 },
+    distanzaPiega: { min: 0, max: 100 }
   };
 
   // Ogni zona deve restare larga almeno così (mm) dopo una divisione.
@@ -46,6 +49,24 @@
   // Protezioni per i dati importati: non sono limiti d'uso, nessuno li raggiunge a mano.
   const LIMITE_PROFONDITA = 40;
   const LIMITE_NODI = 1000;
+
+  // Foglio finito di una zona (Fase 5): il foglio aperto (misura prima del rifilo) sta al centro
+  // della zona; il rifilo si toglie dopo la piegatura. Spento di default: la zona si comporta come prima.
+  //   disegno "dentro": linee e puntini si fermano dentro il foglio finito (a "distanza" dal bordo finito)
+  //   disegno "abbondanza": il reticolo continua anche nella parte che verrà tagliata
+  //   piega "orizzontale": al centro dell'altezza del foglio aperto; le due metà hanno il reticolo
+  //   speculare rispetto alla piega, a "distanza" mm da essa
+  function foglioFinitoPredefinito() {
+    return {
+      attivo: false,
+      larghezza: 145,
+      altezza: 203,
+      rifilo: { sinistra: 2.5, destra: 2.5, alto: 1.5, basso: 1.5 },
+      disegno: 'dentro',
+      distanza: { uguale: true, tutti: 0, alto: 0, basso: 0, sinistra: 0, destra: 0 },
+      piega: { modo: 'orizzontale', distanza: 5 }
+    };
+  }
 
   function impostazioniZonaPredefinite() {
     return {
@@ -60,7 +81,8 @@
       spazio: 1.5,
       formaPunto: 'tondo',
       dimPunto: 0.5,
-      intensitaPunti: 60
+      intensitaPunti: 60,
+      foglio: foglioFinitoPredefinito()
     };
   }
 
@@ -110,6 +132,38 @@
     return valore !== null && typeof valore === 'object' && !Array.isArray(valore) ? valore : {};
   }
 
+  function normalizzaFoglioFinito(grezzo) {
+    const p = foglioFinitoPredefinito();
+    const g = oggetto(grezzo);
+    const r = oggetto(g.rifilo);
+    const d = oggetto(g.distanza);
+    const pg = oggetto(g.piega);
+    return {
+      attivo: booleano(g.attivo, p.attivo),
+      larghezza: numero(g.larghezza, LIMITI.dimPagina, p.larghezza),
+      altezza: numero(g.altezza, LIMITI.dimPagina, p.altezza),
+      rifilo: {
+        sinistra: numero(r.sinistra, LIMITI.rifilo, p.rifilo.sinistra),
+        destra: numero(r.destra, LIMITI.rifilo, p.rifilo.destra),
+        alto: numero(r.alto, LIMITI.rifilo, p.rifilo.alto),
+        basso: numero(r.basso, LIMITI.rifilo, p.rifilo.basso)
+      },
+      disegno: scelta(g.disegno, ['dentro', 'abbondanza'], p.disegno),
+      distanza: {
+        uguale: booleano(d.uguale, p.distanza.uguale),
+        tutti: numero(d.tutti, LIMITI.distanzaFoglio, p.distanza.tutti),
+        alto: numero(d.alto, LIMITI.distanzaFoglio, p.distanza.alto),
+        basso: numero(d.basso, LIMITI.distanzaFoglio, p.distanza.basso),
+        sinistra: numero(d.sinistra, LIMITI.distanzaFoglio, p.distanza.sinistra),
+        destra: numero(d.destra, LIMITI.distanzaFoglio, p.distanza.destra)
+      },
+      piega: {
+        modo: scelta(pg.modo, ['orizzontale', 'nessuna'], p.piega.modo),
+        distanza: numero(pg.distanza, LIMITI.distanzaPiega, p.piega.distanza)
+      }
+    };
+  }
+
   function normalizzaZona(grezza) {
     const p = impostazioniZonaPredefinite();
     const g = oggetto(grezza);
@@ -125,7 +179,8 @@
       spazio: numero(g.spazio, LIMITI.spazio, p.spazio),
       formaPunto: scelta(g.formaPunto, ['tondo', 'quadrato'], p.formaPunto),
       dimPunto: numero(g.dimPunto, LIMITI.dimPunto, p.dimPunto),
-      intensitaPunti: numero(g.intensitaPunti, LIMITI.intensita, p.intensitaPunti)
+      intensitaPunti: numero(g.intensitaPunti, LIMITI.intensita, p.intensitaPunti),
+      foglio: normalizzaFoglioFinito(g.foglio)
     };
   }
 
@@ -279,6 +334,7 @@
     MOTIVI_DUE_PASSI,
     STILI_LINEA,
     LIMITI,
+    foglioFinitoPredefinito,
     MIN_ZONA,
     creaStatoIniziale,
     impostazioniZonaPredefinite,

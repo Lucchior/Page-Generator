@@ -137,6 +137,153 @@
     return out;
   }
 
+  // Posizioni di un reticolo ancorato in "ancora", con passo "passo", comprese tra lo e hi.
+  // indietro = true: il reticolo continua anche prima dell'ancora (verso "lo"), come nell'abbondanza.
+  function posizioni(ancora, passo, lo, hi, indietro) {
+    const fine = Math.floor((hi - ancora) / passo + EPS);
+    const inizio = indietro ? -Math.floor((ancora - lo) / passo + EPS) : 0;
+    const out = [];
+    for (let i = inizio; i <= fine; i++) out.push(ancora + i * passo);
+    return out;
+  }
+
+  // Zona con foglio finito (Fase 5). Il foglio aperto (larghezza x altezza prima del rifilo) sta al centro
+  // della zona; il rifilo toglie i bordi; il reticolo parte dal bordo del foglio finito (più la distanza scelta)
+  // e, se c'è la piega, dalla piega verso l'esterno: le due metà risultano speculari rispetto alla piega.
+  function generaZonaFinita(r, imp, budget) {
+    const f = imp.foglio;
+    const out = { elementi: [], estensione: null, colonne: 0, righe: 0, avvisi: [], errore: null, foglio: null };
+    const W = f.larghezza;
+    const H = f.altezza;
+    const bx = r.x + (r.w - W) / 2;
+    const by = r.y + (r.h - H) / 2;
+    const fx = bx + f.rifilo.sinistra;
+    const fy = by + f.rifilo.alto;
+    const fw = W - f.rifilo.sinistra - f.rifilo.destra;
+    const fh = H - f.rifilo.alto - f.rifilo.basso;
+    const dist = f.distanza.uguale
+      ? { alto: f.distanza.tutti, basso: f.distanza.tutti, sinistra: f.distanza.tutti, destra: f.distanza.tutti }
+      : f.distanza;
+    const foldY = f.piega.modo === 'orizzontale' ? by + H / 2 : null;
+    out.foglio = {
+      aperto: { x: arrotonda(bx), y: arrotonda(by), w: W, h: H },
+      finito: { x: arrotonda(fx), y: arrotonda(fy), w: arrotonda(fw), h: arrotonda(fh) },
+      piega: foldY === null ? null : { y: arrotonda(foldY), x0: arrotonda(bx), x1: arrotonda(bx + W) },
+      distanze: { alto: null, basso: null, sinistra: null, destra: null }
+    };
+    if (W > r.w + 1e-6 || H > r.h + 1e-6) {
+      out.avvisi.push('Il foglio aperto (' + M.formattaIt(W) + ' × ' + M.formattaIt(H) + ' mm) è più grande della zona: è centrato ed esce dai suoi bordi.');
+    }
+    if (fw <= 0 || fh <= 0) {
+      out.avvisi.push('Il rifilo è troppo grande: del foglio non resta nulla.');
+      return out;
+    }
+    const aX = fx + dist.sinistra;
+    const aY = fy + dist.alto;
+    const aW = fw - dist.sinistra - dist.destra;
+    const aH = fh - dist.alto - dist.basso;
+    if (aW <= 0 || aH <= 0) {
+      out.avvisi.push('Le distanze dal bordo sono troppo grandi: non resta spazio per la griglia.');
+      return out;
+    }
+    if (imp.motivo === 'bianco') return out;
+
+    const abb = f.disegno === 'abbondanza';
+    const xLo = abb ? Math.max(bx, r.x) : aX;
+    const xHi = abb ? Math.min(bx + W, r.x + r.w) : aX + aW;
+    const yLo = abb ? Math.max(by, r.y) : aY;
+    const yHi = abb ? Math.min(by + H, r.y + r.h) : aY + aH;
+
+    const passi = M.passiEffettivi(imp);
+    const usaX = USA_X.indexOf(imp.motivo) !== -1;
+    const usaY = USA_Y.indexOf(imp.motivo) !== -1;
+    const xs = usaX ? posizioni(aX, passi.x, xLo, xHi, abb) : [];
+
+    // Metà del foglio: ognuna con le sue righe e il tratto verticale [da, a] su cui corrono le linee verticali.
+    const meta = [];
+    if (foldY === null) {
+      meta.push({ ys: usaY ? posizioni(aY, passi.y, yLo, yHi, abb) : [], da: yLo, a: yHi });
+    } else {
+      const dp = f.piega.distanza;
+      const sSu = usaY ? posizioni(dp, passi.y, dp, foldY - yLo, false) : [];
+      const sGiu = usaY ? posizioni(dp, passi.y, dp, yHi - foldY, false) : [];
+      if (foldY - dp > yLo) meta.push({ ys: sSu.map((s) => foldY - s), da: yLo, a: foldY - dp });
+      if (yHi > foldY + dp) meta.push({ ys: sGiu.map((s) => foldY + s), da: foldY + dp, a: yHi });
+    }
+
+    const resto = budget || { punti: MAX_PUNTI, segmenti: MAX_SEGMENTI };
+    const nY = meta.reduce((s, m) => s + m.ys.length, 0);
+    const segmenti = [];
+
+    if (imp.motivo === 'puntini') {
+      const totale = xs.length * nY;
+      if (totale > resto.punti) {
+        out.errore = 'Troppi puntini (' + (MAX_PUNTI - resto.punti + totale) + '): aumenta il passo o riduci il formato.';
+        return out;
+      }
+      resto.punti -= totale;
+      const centri = [];
+      for (const m of meta) for (const y of m.ys) for (const x of xs) centri.push([arrotonda(x), arrotonda(y)]);
+      if (centri.length) {
+        out.elementi.push({ tipo: 'punti', forma: imp.formaPunto, dimensione: imp.dimPunto, grigio: livelloGrigio(imp.intensitaPunti), centri });
+      }
+    } else {
+      let totale = 0;
+      if (imp.motivo === 'righe-orizzontali') totale = nY;
+      else if (imp.motivo === 'righe-verticali') totale = xs.length * meta.length;
+      else totale = xs.length * meta.length + nY;
+      if (totale > resto.segmenti) {
+        out.errore = 'Troppe linee (' + (MAX_SEGMENTI - resto.segmenti + totale) + '): aumenta il passo o riduci il formato.';
+        return out;
+      }
+      resto.segmenti -= totale;
+      for (const m of meta) {
+        if (imp.motivo === 'righe-orizzontali') {
+          for (const y of m.ys) segmenti.push([arrotonda(xLo), arrotonda(y), arrotonda(xHi), arrotonda(y)]);
+        } else if (imp.motivo === 'righe-verticali') {
+          for (const x of xs) segmenti.push([arrotonda(x), arrotonda(m.da), arrotonda(x), arrotonda(m.a)]);
+        } else {
+          const ymin = Math.min(...m.ys);
+          const ymax = Math.max(...m.ys);
+          if (m.ys.length >= 2) for (const x of xs) segmenti.push([arrotonda(x), arrotonda(ymin), arrotonda(x), arrotonda(ymax)]);
+          if (xs.length >= 2) {
+            const xmin = Math.min(...xs);
+            const xmax = Math.max(...xs);
+            for (const y of m.ys) segmenti.push([arrotonda(xmin), arrotonda(y), arrotonda(xmax), arrotonda(y)]);
+          }
+        }
+      }
+      if (segmenti.length) out.elementi.push(elementoLinee(imp, segmenti));
+    }
+
+    // Parte che resta dopo il rifilo: serve per distanze, estensione e avviso sul bordo della stampante.
+    const dentroX = (v) => v >= fx - EPS && v <= fx + fw + EPS;
+    const dentroY = (v) => v >= fy - EPS && v <= fy + fh + EPS;
+    const xsIn = xs.filter(dentroX);
+    const ysIn = [].concat(...meta.map((m) => m.ys)).filter(dentroY);
+    const d = out.foglio.distanze;
+    if (usaX && xsIn.length) {
+      d.sinistra = arrotonda(Math.min(...xsIn) - fx);
+      d.destra = arrotonda(fx + fw - Math.max(...xsIn));
+    }
+    if (usaY && ysIn.length) {
+      d.alto = arrotonda(Math.min(...ysIn) - fy);
+      d.basso = arrotonda(fy + fh - Math.max(...ysIn));
+    }
+    const ex0 = usaX ? (xsIn.length ? Math.min(...xsIn) : null) : Math.max(xLo, fx);
+    const ex1 = usaX ? (xsIn.length ? Math.max(...xsIn) : null) : Math.min(xHi, fx + fw);
+    const ey0 = usaY ? (ysIn.length ? Math.min(...ysIn) : null) : Math.max(yLo, fy);
+    const ey1 = usaY ? (ysIn.length ? Math.max(...ysIn) : null) : Math.min(yHi, fy + fh);
+    if (ex0 !== null && ey0 !== null && segmenti.length + (out.elementi.length && imp.motivo === 'puntini' ? 1 : 0) > 0) {
+      out.estensione = { x0: ex0, y0: ey0, x1: ex1, y1: ey1 };
+    }
+    out.colonne = Math.max(0, xsIn.length - 1);
+    out.righe = Math.max(0, new Set(ysIn.map(arrotonda)).size - 1);
+    if (usaX && xsIn.length === 0) out.avvisi.push('Nessuna colonna entra nel foglio finito con questo passo e queste distanze.');
+    if (usaY && ysIn.length === 0) out.avvisi.push('Nessuna riga entra nel foglio finito con questo passo e queste distanze.');
+    return out;
+  }
+
   // Scende lungo l'albero delle zone assegnando a ogni zona il suo rettangolo.
   // Una divisione taglia il rettangolo in due parti separate da "spazio" mm; la linea passa al centro dello spazio.
   // Raccoglie in "ris" zone, divisioni (con la linea da disegnare) e avvisi.
@@ -248,10 +395,18 @@
     risolviLayout(stato.layout, area, ris);
     const molte = ris.zone.length > 1;
     const resto = { punti: MAX_PUNTI, segmenti: MAX_SEGMENTI };
+    let soloZone = null; // estensione delle sole griglie, senza le linee di divisione
+    let haFinito = false;
     foglio.avvisi.push(...ris.avvisi);
 
     for (const z of ris.zone) {
-      const g = generaZona(z.rettangolo, z.impostazioni, stato.margini.modo === 'adatta', resto);
+      const finita = z.impostazioni.foglio && z.impostazioni.foglio.attivo;
+      const g = finita
+        ? generaZonaFinita(z.rettangolo, z.impostazioni, resto)
+        : generaZona(z.rettangolo, z.impostazioni, stato.margini.modo === 'adatta', resto);
+      z.finito = g.foglio || null;
+      haFinito = haFinito || !!finita;
+      soloZone = unisci(soloZone, g.estensione);
       if (g.errore) {
         foglio.errore = g.errore;
         return foglio;
@@ -280,12 +435,16 @@
       id: z.id,
       numero: z.numero,
       rettangolo: z.rettangolo,
-      motivo: z.impostazioni.motivo
+      motivo: z.impostazioni.motivo,
+      finito: z.finito || null
     }));
     foglio.divisioni = ris.divisioni;
 
-    if (foglio.estensione) {
-      const e = foglio.estensione;
+    // Con i fogli finiti la linea di divisione è una guida di taglio voluta, anche a filo del bordo:
+    // l'avviso sul bordo della stampante guarda solo la griglia che resta dopo il rifilo.
+    const estAvviso = haFinito ? soloZone : foglio.estensione;
+    if (estAvviso) {
+      const e = estAvviso;
       const distanze = [
         ['sinistro', e.x0],
         ['superiore', e.y0],
@@ -306,7 +465,7 @@
     return foglio;
   }
 
-  Fogli.geometria = { generaFoglio, generaZona, asse, livelloGrigio, schemaLinea, MAX_PUNTI, MAX_SEGMENTI };
+  Fogli.geometria = { generaFoglio, generaZona, generaZonaFinita, asse, livelloGrigio, schemaLinea, MAX_PUNTI, MAX_SEGMENTI };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = Fogli.geometria;
 })(typeof window !== 'undefined' ? window : globalThis);

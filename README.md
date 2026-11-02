@@ -26,6 +26,8 @@ Funziona interamente nel browser: nessun server, nessun account, nessun dato inv
 - **Dividi con il clic:** sopra l'anteprima, spunta «Dividi con il clic» e scegli linea verticale o orizzontale. Un clic su una zona la divide nel punto cliccato (una guida tratteggiata mostra dove cadrà la linea); un clic su una linea la toglie e unisce le zone (resta la prima, con le sue impostazioni). Con **Esc** si esce dalla modalità. Gli stessi comandi sono disponibili anche dai pulsanti nei blocchi, usabili da tastiera.
 - **Preset:** salva con un nome tutte le impostazioni (formato, margini, zone, motivi) nel browser, ricaricale o eliminale; **Esporta in file** crea un file `.json` e **Importa da file** lo rilegge (anche su un altro computer). Il nome del file PDF non fa parte del preset.
 - **Eliminare una zona:** il blocco di ogni zona ha una piccola **X** in alto a destra; premendola la zona sparisce e quella accanto occupa il suo posto (le altre non cambiano). Non c'è la X sull'unica zona rimasta.
+- **Foglio finito e rifilo (v1.3.0):** nel blocco di una zona la sezione «Foglio finito e rifilo» tratta la zona come un foglio aperto (predefinito 145 × 203 mm) centrato nella zona. Scegli quanto si toglie dopo la piegatura su ogni lato (predefinito 2,5 + 2,5 mm sui 145 e 1,5 + 1,5 mm sui 203: finito 140 × 200 mm), se la griglia sta **dentro il foglio finito** o **con abbondanza** (lo stesso reticolo continua nello scarto) e la distanza dal bordo finito (uguale o per lato). La **piega orizzontale** è al centro dei 203 mm prima del rifilo: le due metà hanno la griglia uguale e speculare rispetto alla piega, con la prima riga alla distanza scelta. Il blocco riporta le distanze reali dal bordo finito. Scarto ombreggiato, bordo finito e piega compaiono **solo nell'anteprima**, mai nel PDF; «Vista finita» sopra l'anteprima nasconde lo scarto. «Copia queste misure in tutte le zone» le replica. Con il foglio finito attivo la griglia è ancorata ai bordi: «Adattata al passo» non si applica a quella zona.
+- **Modello incorporato:** nell'elenco Preset e modelli c'è «Due fogli 145 × 203 su A4» (A4 orizzontale, senza margini, due zone da 148,5 mm, linea di divisione stampata per tagliare). Non si può eliminare.
 - **Nuovo foglio:** il pulsante in alto riporta tutto ai valori di partenza (A4, una sola zona, puntini), dopo una conferma. I preset salvati restano.
 - **Ultima configurazione:** il sito riparte da dove l'avevi lasciato (nello stesso browser).
 - **Tema:** Automatico (segue il sistema), Chiaro o Scuro, con interruttore in alto nel pannello; la scelta è ricordata.
@@ -92,6 +94,7 @@ vendor/LICENSE-jspdf.txt  licenza di jsPDF
 test/geometria.test.js    test automatici di geometria, margini, PDF
 test/zone.test.js         test automatici delle zone
 test/preset.test.js       test automatici di preset, archivio e ultima configurazione
+test/foglio.test.js       test automatici di foglio finito, rifilo, piega speculare
 LICENSE                   licenza del progetto (MIT)
 PROJECT_STATUS.md         stato del progetto
 ```

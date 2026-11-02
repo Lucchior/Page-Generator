@@ -30,6 +30,9 @@
   // Modalità «Dividi con il clic»: il clic sull'anteprima divide una zona o toglie una linea.
   let modoDividi = false;
   let direzioneClic = 'verticale';
+  // «Vista finita»: nasconde lo scarto nell'anteprima (non cambia il PDF).
+  let vistaFinita = false;
+  let casellaVista = null;
 
   // Archivio nel browser: se localStorage non è accessibile le operazioni falliscono con un messaggio.
   let memoria = null;
@@ -328,8 +331,18 @@
   }
 
   function creaNota(d, ctx) {
-    const nodo = el('p', 'nota nota-fissa', d.testo);
-    return { d, nodo, aggiorna() { nodo.hidden = d.visibile ? !d.visibile(stato, ctx) : false; } };
+    const nodo = el('p', 'nota nota-fissa');
+    const c = {
+      d,
+      nodo,
+      aggiorna() {
+        const t = testo(d.testo, stato, ctx);
+        nodo.textContent = t;
+        nodo.hidden = !t || (d.visibile ? !d.visibile(stato, ctx) : false);
+      }
+    };
+    c.aggiorna();
+    return c;
   }
 
   function creaControllo(d, ctx) {
@@ -366,6 +379,41 @@
   const dueAssi = (c) => M.MOTIVI_DUE_PASSI.indexOf(motivoDi(c)) !== -1;
   const piuZone = () => M.contaZone(stato.layout) > 1;
   const divDi = (c) => nodoDi(c);
+  const fgDi = (c) => impDi(c).foglio;
+  const fgAttivo = (s, c) => fgDi(c).attivo;
+
+  // Distanze della prima/ultima riga e colonna dal bordo del foglio finito, come calcolate dalla geometria.
+  function testoDistanze(c) {
+    const z = ultimo && ultimo.zone ? ultimo.zone.find((x) => x.id === c.id) : null;
+    if (!z || !z.finito) return '';
+    const d = z.finito.distanze;
+    const f = (v) => (v === null ? '—' : M.formattaIt(v) + ' mm');
+    return 'Dal bordo del foglio finito (' + M.formattaIt(z.finito.finito.w) + ' × ' + M.formattaIt(z.finito.finito.h) + ' mm): sopra ' + f(d.alto) +
+      ', sotto ' + f(d.basso) + ', a sinistra ' + f(d.sinistra) + ', a destra ' + f(d.destra) + '.';
+  }
+
+  // Copia le misure del foglio finito di una zona in tutte le altre.
+  function copiaFoglioInTutte(c) {
+    const sorgente = JSON.stringify(fgDi(c));
+    let n = 0;
+    for (const z of L.foglie(stato.layout)) {
+      if (z.id === c.id) continue;
+      z.impostazioni.foglio = M.normalizzaZona({ foglio: JSON.parse(sorgente) }).foglio;
+      n++;
+    }
+    if (!n) return;
+    annuncia('Misure del foglio finito copiate in ' + n + (n === 1 ? ' altra zona.' : ' altre zone.'));
+    cambiato();
+  }
+  const rifilo = (lato, etichetta) => ({
+    tipo: 'numero', percorso: 'zona.foglio.rifilo.' + lato, etichetta, unita: 'mm', soloNumero: true,
+    min: M.LIMITI.rifilo.min, max: M.LIMITI.rifilo.max, passo: 0.1, visibile: fgAttivo
+  });
+  const distanzaLato = (lato, etichetta) => ({
+    tipo: 'numero', percorso: 'zona.foglio.distanza.' + lato, etichetta, unita: 'mm', soloNumero: true,
+    min: M.LIMITI.distanzaFoglio.min, max: M.LIMITI.distanzaFoglio.max, passo: 0.1,
+    visibile: (s, c) => fgAttivo(s, c) && !fgDi(c).distanza.uguale
+  });
 
   function lunghezzaDivisione(c) {
     const dv = ultimo && ultimo.divisioni ? ultimo.divisioni.find((x) => x.id === c.id) : null;
@@ -484,6 +532,56 @@
         { tipo: 'radio', percorso: 'zona.formaPunto', etichetta: 'Forma', opzioni: [['tondo', 'Tondi'], ['quadrato', 'Quadrati']] },
         { tipo: 'numero', percorso: 'zona.dimPunto', etichetta: 'Dimensione', unita: 'mm', min: M.LIMITI.dimPunto.min, max: M.LIMITI.dimPunto.max, passo: 0.05, minCursore: 0.2, maxCursore: 2, passoCursore: 0.05 },
         intensita('zona.intensitaPunti')
+      ]
+    },
+    {
+      titolo: 'Foglio finito e rifilo',
+      campi: [
+        {
+          tipo: 'casella', percorso: 'zona.foglio.attivo', etichetta: 'Questa zona è un foglio aperto da rifilare',
+          nota: (s, c) => (fgDi(c).attivo ? '' : 'Mostra nell’anteprima cosa resta dopo il rifilo; la griglia parte dal bordo del foglio finito.')
+        },
+        { tipo: 'numero', percorso: 'zona.foglio.larghezza', etichetta: 'Larghezza del foglio aperto (prima del rifilo)', unita: 'mm', soloNumero: true, min: M.LIMITI.dimPagina.min, max: M.LIMITI.dimPagina.max, passo: 0.1, visibile: fgAttivo },
+        { tipo: 'numero', percorso: 'zona.foglio.altezza', etichetta: 'Altezza del foglio aperto (prima del rifilo)', unita: 'mm', soloNumero: true, min: M.LIMITI.dimPagina.min, max: M.LIMITI.dimPagina.max, passo: 0.1, visibile: fgAttivo },
+        { tipo: 'nota', testo: 'Rifilo: quanto si toglie su ogni lato dopo la piegatura. Ogni stampa può avere una ripartizione diversa.', visibile: fgAttivo },
+        rifilo('sinistra', 'Rifilo a sinistra'),
+        rifilo('destra', 'Rifilo a destra'),
+        rifilo('alto', 'Rifilo in alto'),
+        rifilo('basso', 'Rifilo in basso'),
+        {
+          tipo: 'radio', percorso: 'zona.foglio.disegno', etichetta: 'Disegno della griglia', visibile: fgAttivo,
+          opzioni: [['dentro', 'Dentro il foglio finito'], ['abbondanza', 'Con abbondanza']],
+          nota: (s, c) => (fgDi(c).disegno === 'dentro'
+            ? 'Linee e puntini si fermano dentro il foglio finito.'
+            : 'Lo stesso reticolo continua anche nella parte che verrà tagliata.')
+        },
+        { tipo: 'casella', percorso: 'zona.foglio.distanza.uguale', etichetta: 'Stessa distanza dal bordo su tutti i lati', visibile: fgAttivo },
+        {
+          tipo: 'numero', percorso: 'zona.foglio.distanza.tutti', etichetta: 'Distanza dal bordo del foglio finito', unita: 'mm', soloNumero: true,
+          min: M.LIMITI.distanzaFoglio.min, max: M.LIMITI.distanzaFoglio.max, passo: 0.1,
+          visibile: (s, c) => fgAttivo(s, c) && fgDi(c).distanza.uguale
+        },
+        distanzaLato('alto', 'Distanza in alto'),
+        distanzaLato('basso', 'Distanza in basso'),
+        distanzaLato('sinistra', 'Distanza a sinistra'),
+        distanzaLato('destra', 'Distanza a destra'),
+        {
+          tipo: 'radio', percorso: 'zona.foglio.piega.modo', etichetta: 'Piega', visibile: fgAttivo,
+          opzioni: [['orizzontale', 'Orizzontale, al centro'], ['nessuna', 'Nessuna']],
+          nota: (s, c) => (fgDi(c).piega.modo === 'orizzontale'
+            ? 'Al centro dell’altezza del foglio aperto (prima del rifilo). Le due metà hanno la griglia speculare rispetto alla piega. La piega si vede solo nell’anteprima.'
+            : '')
+        },
+        {
+          tipo: 'numero', percorso: 'zona.foglio.piega.distanza', etichetta: 'Distanza della prima riga dalla piega', unita: 'mm', soloNumero: true,
+          min: M.LIMITI.distanzaPiega.min, max: M.LIMITI.distanzaPiega.max, passo: 0.1,
+          visibile: (s, c) => fgAttivo(s, c) && fgDi(c).piega.modo === 'orizzontale'
+        },
+        { tipo: 'nota', testo: (s, c) => testoDistanze(c), visibile: fgAttivo },
+        {
+          tipo: 'pulsante', azione: (c) => copiaFoglioInTutte(c), etichetta: 'Copia queste misure in tutte le zone',
+          visibile: (s, c) => fgAttivo(s, c) && piuZone()
+        }
       ]
     },
     {
@@ -771,12 +869,17 @@
       let t = '';
       if (n.tipo === 'zona') {
         const z = foglio.zone.find((x) => x.id === b.id);
-        t = (z ? M.formattaIt(z.rettangolo.w) + ' × ' + M.formattaIt(z.rettangolo.h) + ' mm · ' : '') + (NOMI_MOTIVI[n.impostazioni.motivo] || '');
+        t = z && z.finito
+          ? 'finito ' + M.formattaIt(z.finito.finito.w) + ' × ' + M.formattaIt(z.finito.finito.h) + ' mm · '
+          : (z ? M.formattaIt(z.rettangolo.w) + ' × ' + M.formattaIt(z.rettangolo.h) + ' mm · ' : '');
+        t += NOMI_MOTIVI[n.impostazioni.motivo] || '';
       } else {
         const dv = foglio.divisioni.find((x) => x.id === b.id);
         t = 'Linea ' + n.direzione + (dv ? ' a ' + M.formattaIt(dv.posizioneMm) + ' mm' : '') + (n.linea.visibile ? '' : ' · non stampata');
       }
       b.riepilogo.textContent = t;
+      // Le note con le distanze dipendono dal foglio appena calcolato.
+      for (const s of b.parti) for (const c of s.controlli) if (c.d.tipo === 'nota') c.aggiorna();
     }
   }
 
@@ -887,7 +990,9 @@
     foglioEl.classList.remove('obsoleto');
     scaricaEl.disabled = false;
 
-    A.mostra(foglioEl, foglio, { dividi: modoDividi });
+    const conFinito = foglio.zone.some((z) => z.finito);
+    if (casellaVista) casellaVista.hidden = !conFinito;
+    A.mostra(foglioEl, foglio, { dividi: modoDividi, vistaFinita: vistaFinita && conFinito });
     aggiornaRiepiloghi(foglio);
     A.adatta(pianoEl, foglioEl, foglio);
     foglioEl.setAttribute('aria-label', 'Anteprima del foglio: ' + nomeFormato() + ', ' + descrizioneMotivo(foglio));
@@ -1055,6 +1160,20 @@
     lab.append(casella, el('span', null, 'Dividi con il clic'));
     riga.appendChild(lab);
 
+    const labVista = el('label', 'casella');
+    const cVista = el('input');
+    cVista.type = 'checkbox';
+    cVista.id = prossimoId();
+    labVista.append(cVista, el('span', null, 'Vista finita (nasconde lo scarto)'));
+    labVista.hidden = true;
+    casellaVista = labVista;
+    riga.appendChild(labVista);
+    cVista.addEventListener('change', () => {
+      vistaFinita = cVista.checked;
+      rigenera();
+      annuncia(vistaFinita ? 'Vista finita attiva: lo scarto è nascosto nell’anteprima.' : 'Vista finita disattivata.');
+    });
+
     const direzione = gruppoRadio(
       'Direzione della linea da creare',
       [['verticale', 'Linea verticale'], ['orizzontale', 'Linea orizzontale']],
@@ -1104,6 +1223,9 @@
     cambiato();
   }
 
+  const MODELLI = PR.modelli();
+  const PREFISSO_MODELLO = '\u0000modello:';
+
   function creaPannelloPreset() {
     const nodo = el('fieldset', 'sezione');
     const legenda = el('legend', null, 'Preset');
@@ -1112,7 +1234,7 @@
 
     const idSelezione = prossimoId();
     const campoSel = el('div', 'campo');
-    const etichettaSel = el('label', null, 'Preset salvati');
+    const etichettaSel = el('label', null, 'Preset e modelli');
     etichettaSel.htmlFor = idSelezione;
     const elenco = el('select');
     elenco.id = idSelezione;
@@ -1165,20 +1287,38 @@
     function aggiornaElenco(scelto) {
       const nomi = archivio.elenco();
       elenco.replaceChildren();
-      const vuoto = el('option', null, nomi.length ? '— scegli un preset —' : '— nessun preset salvato —');
+      const vuoto = el('option', null, '— scegli un preset o un modello —');
       vuoto.value = '';
       elenco.appendChild(vuoto);
-      for (const n of nomi) {
-        const o = el('option', null, n);
-        o.value = n;
-        elenco.appendChild(o);
+      // I modelli incorporati hanno un valore che un nome salvato non può avere (i caratteri di controllo vengono tolti).
+      const gMod = el('optgroup');
+      gMod.label = 'Modelli incorporati';
+      MODELLI.forEach((m, i) => {
+        const o = el('option', null, m.nome);
+        o.value = PREFISSO_MODELLO + i;
+        gMod.appendChild(o);
+      });
+      elenco.appendChild(gMod);
+      if (nomi.length) {
+        const gUt = el('optgroup');
+        gUt.label = 'I tuoi preset';
+        for (const n of nomi) {
+          const o = el('option', null, n);
+          o.value = n;
+          gUt.appendChild(o);
+        }
+        elenco.appendChild(gUt);
       }
       elenco.value = scelto && nomi.indexOf(scelto) !== -1 ? scelto : '';
-      bCarica.disabled = bElimina.disabled = !elenco.value;
+      aggiornaBottoni();
+    }
+    function aggiornaBottoni() {
+      bCarica.disabled = !elenco.value;
+      bElimina.disabled = !elenco.value || elenco.value.startsWith(PREFISSO_MODELLO);
     }
     elenco.addEventListener('change', () => {
-      bCarica.disabled = bElimina.disabled = !elenco.value;
-      if (elenco.value) nome.value = elenco.value;
+      aggiornaBottoni();
+      if (elenco.value && !elenco.value.startsWith(PREFISSO_MODELLO)) nome.value = elenco.value;
     });
 
     function salva() {
@@ -1194,6 +1334,13 @@
 
     function carica() {
       if (!elenco.value) return;
+      if (elenco.value.startsWith(PREFISSO_MODELLO)) {
+        const m = MODELLI[Number(elenco.value.slice(PREFISSO_MODELLO.length))];
+        if (!m) return;
+        applicaStato(JSON.parse(JSON.stringify(m.stato)));
+        mostra('Modello «' + m.nome + '» caricato.', false);
+        return;
+      }
       const r = archivio.carica(elenco.value);
       if (!r.ok) { mostra(r.errore, true); aggiornaElenco(); return; }
       nome.value = r.nome;

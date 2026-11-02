@@ -938,3 +938,20 @@ select {
     box-shadow: 0 0 0 3px var(--accento);
   }
 }
+
+/* ---------- Fase 5: foglio finito, scarto, piega (solo anteprima) ---------- */
+.strato-finito { pointer-events: none; }
+.strato-finito .scarto { fill: #1c1c1c; fill-opacity: 0.16; }
+.strato-finito .esterno-finito { fill: #8a8f98; fill-opacity: 1; }
+.strato-finito .bordo-finito {
+  fill: none;
+  stroke: #c2410c;
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+}
+.strato-finito .guida-piega {
+  stroke: #2446a8;
+  stroke-width: 1px;
+  stroke-dasharray: 6 4;
+  vector-effect: non-scaling-stroke;
+}

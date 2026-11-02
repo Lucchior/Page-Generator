@@ -99,7 +99,7 @@
     const copia = {
       tipo: 'zona',
       id: nuovoId(stato.layout, 'z'),
-      impostazioni: Object.assign({}, zona.impostazioni)
+      impostazioni: JSON.parse(JSON.stringify(zona.impostazioni))
     };
     const divisione = Object.assign(
       { tipo: 'divisione', id: nuovoId(stato.layout, 'd') },
