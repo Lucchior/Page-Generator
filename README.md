@@ -27,6 +27,7 @@ Funziona interamente nel browser: nessun server, nessun account, nessun dato inv
 - **Preset:** salva con un nome tutte le impostazioni (formato, margini, zone, motivi) nel browser, ricaricale o eliminale; **Esporta in file** crea un file `.json` e **Importa da file** lo rilegge (anche su un altro computer). Il nome del file PDF non fa parte del preset.
 - **Eliminare una zona:** il blocco di ogni zona ha una piccola **X** in alto a destra; premendola la zona sparisce e quella accanto occupa il suo posto (le altre non cambiano). Non c'è la X sull'unica zona rimasta.
 - **Foglio finito e rifilo (v1.3.0):** nel blocco di una zona la sezione «Foglio finito e rifilo» tratta la zona come un foglio aperto (predefinito 145 × 203 mm) centrato nella zona. Scegli quanto si toglie dopo la piegatura su ogni lato (predefinito 2,5 + 2,5 mm sui 145 e 1,5 + 1,5 mm sui 203: finito 140 × 200 mm), se la griglia sta **dentro il foglio finito** o **con abbondanza** (lo stesso reticolo continua nello scarto) e la distanza dal bordo finito (uguale o per lato). La **piega orizzontale** è al centro dei 203 mm prima del rifilo: le due metà hanno la griglia uguale e speculare rispetto alla piega, con la prima riga alla distanza scelta. Il blocco riporta le distanze reali dal bordo finito. Scarto ombreggiato, bordo finito e piega compaiono **solo nell'anteprima**, mai nel PDF; «Vista finita» sopra l'anteprima nasconde lo scarto. «Copia queste misure in tutte le zone» le replica. Con il foglio finito attivo la griglia è ancorata ai bordi: «Adattata al passo» non si applica a quella zona.
+- **Prima e ultima pagina (v1.4.0):** nel blocco della **zona 1**, se sono attivi foglio finito e piega orizzontale, la sezione «Prima e ultima pagina (immagini)» permette di caricare una **PNG** per la metà in alto e una per la metà in basso del foglio aperto (145 × 101,5 mm ciascuna). Per ogni immagine scegli: adattamento (**Contieni** senza ritagli, **Riempi** ritaglia l'eccesso, **Estendi** deforma), area (**foglio aperto** con abbondanza o **solo foglio finito**) e **Ruota di 180°**. Nelle metà con immagine non c'è griglia. Per 300 dpi servono circa 1713 × 1200 px per metà (meglio 3425 × 2400 px a 600 dpi); sotto i 300 dpi compare un avviso. Limiti: solo PNG, massimo 30 MB e 60 megapixel. Le immagini restano nel browser (nessun invio in rete), finiscono nel PDF a piena risoluzione e **non si salvano nei preset né nell'ultima configurazione**: dopo aver ricaricato la pagina o caricato un preset vanno scelte di nuovo.
 - **Modello incorporato:** nell'elenco Preset e modelli c'è «Due fogli 145 × 203 su A4» (A4 orizzontale, senza margini, due zone da 148,5 mm, linea di divisione stampata per tagliare). Non si può eliminare.
 - **Nuovo foglio:** il pulsante in alto riporta tutto ai valori di partenza (A4, una sola zona, puntini), dopo una conferma. I preset salvati restano.
 - **Ultima configurazione:** il sito riparte da dove l'avevi lasciato (nello stesso browser).
@@ -86,7 +87,8 @@ js/layout.js              albero delle zone: elenco, ricerca, divisione e unione
 js/geometria.js           calcolo di zone, linee e puntini in millimetri
 js/anteprima.js           anteprima SVG e selezione delle zone
 js/pdf.js                 esportazione PDF
-js/preset.js              preset, file JSON, archivio nel browser, ultima configurazione
+js/preset.js              preset, modelli incorporati, file JSON, archivio nel browser, ultima configurazione
+js/immagini.js            caricamento e controllo delle PNG, preparazione per il PDF
 js/tema.js                tema chiaro/scuro (caricato per primo, evita lampi di colore)
 js/interfaccia.js         controlli e collegamento di tutte le parti
 vendor/jspdf.umd.min.js   libreria jsPDF 4.2.1 (di terzi)
@@ -95,6 +97,7 @@ test/geometria.test.js    test automatici di geometria, margini, PDF
 test/zone.test.js         test automatici delle zone
 test/preset.test.js       test automatici di preset, archivio e ultima configurazione
 test/foglio.test.js       test automatici di foglio finito, rifilo, piega speculare
+test/immagini.test.js     test automatici delle immagini di prima e ultima pagina
 LICENSE                   licenza del progetto (MIT)
 PROJECT_STATUS.md         stato del progetto
 ```

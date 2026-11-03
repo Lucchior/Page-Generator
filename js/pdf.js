@@ -51,6 +51,11 @@
         doc.setLineDash(el.dash, 0);
         for (const s of el.segmenti) doc.line(s[0], s[1], s[2], s[3]);
         doc.setLineDash([], 0);
+      } else if (el.tipo === 'immagine') {
+        // "dati" è il PNG già ritagliato e ruotato (lo prepara l'interfaccia); senza dati l'immagine si salta.
+        if (typeof el.dati === 'string' && el.dati.indexOf('data:image/png;base64,') === 0) {
+          doc.addImage(el.dati, 'PNG', el.x, el.y, el.w, el.h, undefined, 'FAST');
+        }
       } else if (el.tipo === 'punti') {
         doc.setFillColor(el.grigio);
         if (el.forma === 'quadrato') {

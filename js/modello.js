@@ -56,6 +56,12 @@
   //   disegno "abbondanza": il reticolo continua anche nella parte che verrà tagliata
   //   piega "orizzontale": al centro dell'altezza del foglio aperto; le due metà hanno il reticolo
   //   speculare rispetto alla piega, a "distanza" mm da essa
+  // Immagine di una metà (Fase 6): le immagini stesse non fanno parte dello stato né dei preset.
+  //   adatta: contieni | riempi | estendi; area: aperto (con abbondanza) | finito; ruota: 180 gradi
+  function immaginePredefinita() {
+    return { adatta: 'contieni', area: 'aperto', ruota: false };
+  }
+
   function foglioFinitoPredefinito() {
     return {
       attivo: false,
@@ -64,7 +70,8 @@
       rifilo: { sinistra: 2.5, destra: 2.5, alto: 1.5, basso: 1.5 },
       disegno: 'dentro',
       distanza: { uguale: true, tutti: 0, alto: 0, basso: 0, sinistra: 0, destra: 0 },
-      piega: { modo: 'orizzontale', distanza: 5 }
+      piega: { modo: 'orizzontale', distanza: 5 },
+      immagini: { alto: immaginePredefinita(), basso: immaginePredefinita() }
     };
   }
 
@@ -138,6 +145,16 @@
     const r = oggetto(g.rifilo);
     const d = oggetto(g.distanza);
     const pg = oggetto(g.piega);
+    const im = oggetto(g.immagini);
+    const normImmagine = (x) => {
+      const o = oggetto(x);
+      const q = immaginePredefinita();
+      return {
+        adatta: scelta(o.adatta, ['contieni', 'riempi', 'estendi'], q.adatta),
+        area: scelta(o.area, ['aperto', 'finito'], q.area),
+        ruota: booleano(o.ruota, q.ruota)
+      };
+    };
     return {
       attivo: booleano(g.attivo, p.attivo),
       larghezza: numero(g.larghezza, LIMITI.dimPagina, p.larghezza),
@@ -160,7 +177,8 @@
       piega: {
         modo: scelta(pg.modo, ['orizzontale', 'nessuna'], p.piega.modo),
         distanza: numero(pg.distanza, LIMITI.distanzaPiega, p.piega.distanza)
-      }
+      },
+      immagini: { alto: normImmagine(im.alto), basso: normImmagine(im.basso) }
     };
   }
 

@@ -47,6 +47,23 @@
     return nodo('path', { d, fill: grigio(el.grigio) });
   }
 
+  // Immagine di una metà: un svg annidato ritaglia sul rettangolo visibile; l'immagine è posta in modo
+  // che la parte "ritaglio" riempia esattamente quel rettangolo. Ruotata di 180° attorno al centro.
+  function disegnaImmagine(el) {
+    if (typeof el.anteprima !== 'string' || !/^(data:image\/|blob:)/.test(el.anteprima)) return null;
+    const r = el.ritaglio;
+    const pw = el.w / r.w;
+    const ph = el.h / r.h;
+    const x = el.x - r.x * pw;
+    const y = el.y - r.y * ph;
+    const g = nodo('svg', { x: n(el.x), y: n(el.y), width: n(el.w), height: n(el.h), viewBox: n(el.x) + ' ' + n(el.y) + ' ' + n(el.w) + ' ' + n(el.h), overflow: 'hidden', class: 'immagine-meta' });
+    const img = nodo('image', { x: n(x), y: n(y), width: n(pw), height: n(ph), preserveAspectRatio: 'none' });
+    img.setAttribute('href', el.anteprima);
+    if (el.ruota) img.setAttribute('transform', 'rotate(180 ' + n(el.x + el.w / 2) + ' ' + n(el.y + el.h / 2) + ')');
+    g.appendChild(img);
+    return g;
+  }
+
   // Solo anteprima, mai nel PDF: scarto ombreggiato, bordo del foglio finito e linea di piega.
   // Con "vistaFinita" lo scarto (e tutto ciò che sta fuori dai fogli finiti) viene nascosto.
   function disegnaFinito(svg, foglio, vistaFinita) {
@@ -80,7 +97,12 @@
     });
     svg.appendChild(nodo('rect', { x: 0, y: 0, width: n(foglio.larghezza), height: n(foglio.altezza), fill: '#ffffff' }));
     for (const el of foglio.elementi) {
-      svg.appendChild(el.tipo === 'linee' ? disegnaLinee(el) : disegnaPunti(el));
+      if (el.tipo === 'immagine') {
+        const i = disegnaImmagine(el);
+        if (i) svg.appendChild(i);
+      } else {
+        svg.appendChild(el.tipo === 'linee' ? disegnaLinee(el) : disegnaPunti(el));
+      }
     }
     if (foglio.zone) disegnaFinito(svg, foglio, !!(opzioni && opzioni.vistaFinita));
     return svg;

@@ -7,7 +7,7 @@
   'use strict';
 
   const F = window.Fogli;
-  if (!F || !F.modello || !F.layout || !F.geometria || !F.anteprima || !F.pdf || !F.preset) {
+  if (!F || !F.modello || !F.layout || !F.geometria || !F.anteprima || !F.pdf || !F.preset || !F.immagini) {
     document.body.textContent = 'Errore: alcuni file del programma non sono stati caricati. Controlla la cartella js/ e ricarica la pagina.';
     return;
   }
@@ -17,6 +17,7 @@
   const A = F.anteprima;
   const P = F.pdf;
   const PR = F.preset;
+  const IM = F.immagini;
 
   const stato = M.creaStatoIniziale();
   const sezioni = [];
@@ -32,6 +33,18 @@
   let direzioneClic = 'verticale';
   // «Vista finita»: nasconde lo scarto nell'anteprima (non cambia il PDF).
   let vistaFinita = false;
+  // Immagini caricate per le due metà della zona 1 (solo in memoria: non vanno nei preset né nel salvataggio).
+  const immagini = { alto: null, basso: null };
+  const NOMI_LATO = { alto: 'in alto', basso: 'in basso' };
+  const dimImmagini = () => {
+    const d = {};
+    for (const lato of ['alto', 'basso']) if (immagini[lato]) d[lato] = { w: immagini[lato].w, h: immagini[lato].h };
+    return d;
+  };
+  function togliImmagine(lato) {
+    IM.libera(immagini[lato]);
+    immagini[lato] = null;
+  }
   let casellaVista = null;
 
   // Archivio nel browser: se localStorage non è accessibile le operazioni falliscono con un messaggio.
@@ -330,6 +343,71 @@
     return c;
   }
 
+  // Caricamento di un'immagine per una metà del foglio: scelta file, informazioni, rimozione.
+  function creaImmagineMeta(d, ctx) {
+    const lato = d.lato;
+    const id = prossimoId();
+    const nodo = el('div', 'campo campo-immagine');
+    nodo.appendChild(el('span', 'etichetta', 'Immagine ' + NOMI_LATO[lato]));
+    const riga = el('div', 'gruppo-pulsanti due');
+    const bCarica = el('button', 'pulsante secondario', 'Carica PNG…');
+    bCarica.type = 'button';
+    const bRimuovi = el('button', 'pulsante secondario', 'Rimuovi');
+    bRimuovi.type = 'button';
+    const file = el('input');
+    file.type = 'file';
+    file.accept = '.png,image/png';
+    file.hidden = true;
+    file.id = id;
+    file.setAttribute('aria-label', 'File PNG per l’immagine ' + NOMI_LATO[lato]);
+    riga.append(bCarica, bRimuovi);
+    const info = el('p', 'nota');
+    const errore = el('p', 'messaggio errore');
+    errore.hidden = true;
+    errore.setAttribute('role', 'alert');
+    nodo.append(riga, file, info, errore);
+    const c = base(d, nodo, ctx);
+    descrivi(c, bCarica);
+    c.sincronizza = function () {
+      const im = immagini[lato];
+      bRimuovi.hidden = !im;
+      bCarica.textContent = im ? 'Sostituisci…' : 'Carica PNG…';
+      if (!im) {
+        info.textContent = 'Nessuna immagine: la metà resta con la griglia.';
+        return;
+      }
+      const dato = ultimo && ultimo.immagini ? ultimo.immagini.find((x) => x.lato === lato) : null;
+      info.textContent = im.nome + ' · ' + im.w + ' × ' + im.h + ' px' + (dato ? ' · circa ' + dato.dpi + ' dpi' : '');
+    };
+    bCarica.addEventListener('click', () => file.click());
+    bRimuovi.addEventListener('click', () => {
+      togliImmagine(lato);
+      errore.hidden = true;
+      annuncia('Immagine ' + NOMI_LATO[lato] + ' rimossa.');
+      cambiato();
+    });
+    file.addEventListener('change', () => {
+      const f = file.files && file.files[0];
+      file.value = '';
+      if (!f) return;
+      errore.hidden = true;
+      IM.carica(f).then(
+        (nuova) => {
+          togliImmagine(lato);
+          immagini[lato] = nuova;
+          annuncia('Immagine ' + NOMI_LATO[lato] + ' caricata.');
+          cambiato();
+        },
+        (e) => {
+          errore.textContent = e.message;
+          errore.hidden = false;
+          annuncia(e.message);
+        }
+      );
+    });
+    return c;
+  }
+
   function creaNota(d, ctx) {
     const nodo = el('p', 'nota nota-fissa');
     const c = {
@@ -353,6 +431,7 @@
       case 'casella': return creaCasella(d, ctx);
       case 'testo': return creaTesto(d, ctx);
       case 'pulsante': return creaPulsante(d, ctx);
+      case 'immagine': return creaImmagineMeta(d, ctx);
       default: return creaNota(d, ctx);
     }
   }
@@ -582,6 +661,22 @@
           tipo: 'pulsante', azione: (c) => copiaFoglioInTutte(c), etichetta: 'Copia queste misure in tutte le zone',
           visibile: (s, c) => fgAttivo(s, c) && piuZone()
         }
+      ]
+    },
+    {
+      titolo: 'Prima e ultima pagina (immagini)',
+      visibile: (s, c) => c.id === L.primaFoglia(s.layout).id && fgAttivo(s, c) && fgDi(c).piega.modo === 'orizzontale',
+      campi: [
+        { tipo: 'nota', testo: 'Una PNG per ciascuna metà del foglio aperto, sopra e sotto la piega. Nelle metà con immagine non c’è griglia. Le immagini non si salvano nei preset: dopo aver ricaricato la pagina vanno scelte di nuovo. Per 300 dpi servono circa 1713 × 1200 px per metà.' },
+        ...['alto', 'basso'].flatMap((lato) => {
+          const quando = () => !!immagini[lato];
+          return [
+            { tipo: 'immagine', lato },
+            { tipo: 'selezione', percorso: 'zona.foglio.immagini.' + lato + '.adatta', etichetta: 'Adattamento (immagine ' + NOMI_LATO[lato] + ')', visibile: quando, opzioni: [['contieni', 'Contieni (tutta visibile)'], ['riempi', 'Riempi (ritaglia l’eccesso)'], ['estendi', 'Estendi (deforma)']] },
+            { tipo: 'selezione', percorso: 'zona.foglio.immagini.' + lato + '.area', etichetta: 'Area (immagine ' + NOMI_LATO[lato] + ')', visibile: quando, opzioni: [['aperto', 'Foglio aperto (con abbondanza)'], ['finito', 'Solo foglio finito']] },
+            { tipo: 'casella', percorso: 'zona.foglio.immagini.' + lato + '.ruota', etichetta: 'Ruota di 180° (immagine ' + NOMI_LATO[lato] + ')', visibile: quando }
+          ];
+        })
       ]
     },
     {
@@ -879,7 +974,7 @@
       }
       b.riepilogo.textContent = t;
       // Le note con le distanze dipendono dal foglio appena calcolato.
-      for (const s of b.parti) for (const c of s.controlli) if (c.d.tipo === 'nota') c.aggiorna();
+      for (const s of b.parti) for (const c of s.controlli) if (c.d.tipo === 'nota' || c.d.tipo === 'immagine') c.aggiorna();
     }
   }
 
@@ -976,7 +1071,8 @@
   }
 
   function rigenera() {
-    const foglio = G.generaFoglio(stato);
+    const foglio = G.generaFoglio(stato, dimImmagini());
+    for (const el of foglio.elementi) if (el.tipo === 'immagine' && immagini[el.lato]) el.anteprima = immagini[el.lato].anteprima;
     ultimo = foglio;
     avvisiEl.replaceChildren();
     campoNome.placeholder = M.nomeFileAutomatico(stato);
@@ -1010,7 +1106,7 @@
     const automatico = M.nomeFileAutomatico(stato).replace(/\.pdf$/, '');
     const nome = P.sanificaNomeFile(stato.stampa.nomeFile, automatico);
     try {
-      P.scarica(ultimo, nome);
+      P.scarica(IM.preparaPerPdf(ultimo, immagini), nome);
       annuncia('PDF creato: ' + nome + '.');
     } catch (errore) {
       aggiungiAvviso('Non è stato possibile creare il PDF: ' + errore.message, 'errore');
@@ -1218,6 +1314,10 @@
 
   // Sostituisce tutte le impostazioni (da preset, file o ripristino) e riparte con i blocchi nello stato iniziale.
   function applicaStato(nuovo) {
+    const avevaImmagini = !!(immagini.alto || immagini.basso);
+    togliImmagine('alto');
+    togliImmagine('basso');
+    if (avevaImmagini) annuncia('Le immagini sono state rimosse: vanno caricate di nuovo.');
     Object.assign(stato, nuovo);
     aperti.clear();
     cambiato();
