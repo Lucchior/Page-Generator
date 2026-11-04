@@ -31,19 +31,24 @@ function png(w, h) {
   return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), blocco('IHDR', ihdr), blocco('IDAT', zlib.deflateSync(raw)), blocco('IEND', Buffer.alloc(0))]);
 }
 
-function dueFogli(mod) {
+// A4 verticale con due zone sovrapposte (210 × 148,5 mm), foglio aperto 203 × 145 mm, piega verticale.
+function dueZone(mod1, mod2, finito = true) {
   const s = M.creaStatoIniziale();
-  s.pagina.formato = 'A4'; s.pagina.orientamento = 'orizzontale'; s.margini.senza = true; s.stampa.sogliaAvviso = 0;
-  L.dividiZona(s, 'z1', 'verticale', { valore: 50, unita: '%' });
+  s.pagina.formato = 'A4'; s.pagina.orientamento = 'verticale'; s.margini.senza = true; s.stampa.sogliaAvviso = 0;
+  L.dividiZona(s, 'z1', 'orizzontale', { valore: 50, unita: '%' });
   s.layout.spazio = 0;
-  for (const z of L.foglie(s.layout)) {
+  const zone = L.foglie(s.layout);
+  for (const z of zone) {
     Object.assign(z.impostazioni, { motivo: 'puntini', passoX: 5, passoY: 5, passoUguale: false });
-    z.impostazioni.foglio.attivo = true;
+    z.impostazioni.foglio.attivo = finito;
   }
-  if (mod) mod(L.foglie(s.layout)[0].impostazioni);
-  return M.normalizza(s);
+  if (mod1) mod1(zone[0].impostazioni);
+  if (mod2) mod2(zone[1].impostazioni);
+  return { stato: M.normalizza(s), ids: L.foglie(M.normalizza(s).layout).map((z) => z.id) };
 }
 const imm = (f) => f.elementi.filter((e) => e.tipo === 'immagine');
+const img = (ids, ...dim) => Object.fromEntries(dim.map((d, i) => [ids[i], d]).filter((x) => x[1]));
+const soloImmagine = (i) => { i.motivo = 'immagine'; };
 
 test('intestazione PNG: dimensioni lette dal contenuto', () => {
   assert.deepEqual(I.leggiIntestazionePng(png(30, 20)), { w: 30, h: 20 });
@@ -60,75 +65,98 @@ test('intestazione PNG: file non PNG, troncati o enormi vengono rifiutati', () =
   assert.ok(I.leggiIntestazionePng(zero).errore);
 });
 
-test('senza immagini nulla cambia; con piega assente le immagini non compaiono', () => {
-  assert.equal(imm(G.generaFoglio(dueFogli())).length, 0);
-  const f = G.generaFoglio(dueFogli((i) => { i.foglio.piega.modo = 'nessuna'; }), { alto: { w: 1713, h: 1200 } });
+test('motivo immagine senza file caricato: la zona resta vuota, nessun errore', () => {
+  const { stato, ids } = dueZone(soloImmagine, soloImmagine);
+  const f = G.generaFoglio(stato, {});
+  assert.equal(f.errore, null);
   assert.equal(imm(f).length, 0);
+  assert.equal(f.elementi.filter((e) => e.tipo === 'punti').length, 0);
+  assert.equal(ids.length, 2);
 });
 
-test('immagine nelle due metà della zona 1: foglio aperto, 145 × 101,5 mm, solo zona 1', () => {
-  const f = G.generaFoglio(dueFogli(), { alto: { w: 1740, h: 1218 }, basso: { w: 1740, h: 1218 } });
+test('l’immagine copre tutto il foglio aperto della zona (203 × 145) e la zona 2 è indipendente', () => {
+  const { stato, ids } = dueZone(soloImmagine, soloImmagine);
+  const f = G.generaFoglio(stato, img(ids, { w: 2030, h: 1450 }, { w: 2030, h: 1450 }));
   const [a, b] = imm(f);
-  assert.equal(a.lato, 'alto'); assert.equal(b.lato, 'basso');
-  assert.ok(vicino(a.x, 1.75) && vicino(a.y, 3.5) && vicino(a.w, 145) && vicino(a.h, 101.5));
-  assert.ok(vicino(b.y, 105) && vicino(b.h, 101.5));
+  assert.equal(a.zona, ids[0]); assert.equal(b.zona, ids[1]);
+  assert.ok(vicino(a.x, 3.5) && vicino(a.y, 1.75) && vicino(a.w, 203) && vicino(a.h, 145));
+  assert.ok(vicino(b.y, 148.5 + 1.75) && vicino(b.w, 203));
   assert.equal(f.immagini.length, 2);
-  assert.ok(a.dpi >= 300);
+  assert.ok(a.dpi >= 250 && a.dpi <= 260);
 });
 
-test('le metà con immagine non hanno griglia; l’altra metà sì; la zona 2 resta intera', () => {
-  const f = G.generaFoglio(dueFogli(), { alto: { w: 1740, h: 1218 } });
-  const centri = f.elementi.filter((e) => e.tipo === 'punti').flatMap((e) => e.centri);
-  const z1 = centri.filter((c) => c[0] < 148.5);
-  assert.ok(z1.every((c) => c[1] > 105), 'nessun puntino sopra la piega in zona 1');
-  assert.ok(z1.length > 0);
-  assert.ok(centri.some((c) => c[0] > 148.5 && c[1] < 105), 'la zona 2 ha ancora la metà alta');
+test('solo una zona con immagine: l’altra mantiene la sua griglia', () => {
+  const { stato, ids } = dueZone(soloImmagine, null);
+  const f = G.generaFoglio(stato, img(ids, { w: 2030, h: 1450 }));
+  assert.equal(imm(f).length, 1);
+  const punti = f.elementi.filter((e) => e.tipo === 'punti').flatMap((e) => e.centri);
+  assert.ok(punti.length > 0 && punti.every((c) => c[1] > 148.5));
+});
+
+test('senza foglio finito l’immagine copre la zona intera', () => {
+  const { stato, ids } = dueZone(soloImmagine, null, false);
+  const e = imm(G.generaFoglio(stato, img(ids, { w: 2100, h: 1485 })))[0];
+  assert.ok(vicino(e.x, 0) && vicino(e.y, 0) && vicino(e.w, 210) && vicino(e.h, 148.5));
 });
 
 test('adattamento: contieni, riempi, estendi', () => {
-  const dim = { alto: { w: 1000, h: 1000 } }; // quadrata in una metà 145 × 101,5
-  let e = imm(G.generaFoglio(dueFogli(), dim))[0];
-  assert.ok(vicino(e.h, 101.5) && vicino(e.w, 101.5) && vicino(e.x, 1.75 + (145 - 101.5) / 2), 'contieni centra senza deformare');
-  e = imm(G.generaFoglio(dueFogli((i) => { i.foglio.immagini.alto.adatta = 'riempi'; }), dim))[0];
-  assert.ok(vicino(e.w, 145) && vicino(e.h, 101.5));
-  assert.ok(vicino(e.ritaglio.w, 1) && vicino(e.ritaglio.h, 101.5 / 145, 1e-3) && vicino(e.ritaglio.y, (1 - 101.5 / 145) / 2, 1e-3));
-  e = imm(G.generaFoglio(dueFogli((i) => { i.foglio.immagini.alto.adatta = 'estendi'; }), dim))[0];
-  assert.ok(vicino(e.w, 145) && vicino(e.h, 101.5));
+  const quadrata = (m) => {
+    const { stato, ids } = dueZone((i) => { soloImmagine(i); m(i); });
+    return imm(G.generaFoglio(stato, img(ids, { w: 1000, h: 1000 })))[0];
+  };
+  let e = quadrata(() => {});
+  assert.ok(vicino(e.h, 145) && vicino(e.w, 145) && vicino(e.x, 3.5 + (203 - 145) / 2), 'contieni centra senza deformare');
+  e = quadrata((i) => { i.immagine.adatta = 'riempi'; });
+  assert.ok(vicino(e.w, 203) && vicino(e.h, 145));
+  assert.ok(vicino(e.ritaglio.w, 1) && vicino(e.ritaglio.h, 145 / 203, 1e-3) && vicino(e.ritaglio.y, (1 - 145 / 203) / 2, 1e-3));
+  e = quadrata((i) => { i.immagine.adatta = 'estendi'; });
+  assert.ok(vicino(e.w, 203) && vicino(e.h, 145));
   assert.deepEqual(e.ritaglio, { x: 0, y: 0, w: 1, h: 1 });
 });
 
-test('area "finito": limitata al foglio finito (rifilo escluso)', () => {
-  const e = imm(G.generaFoglio(dueFogli((i) => { i.foglio.immagini.alto.area = 'finito'; i.foglio.immagini.alto.adatta = 'estendi'; }), { alto: { w: 1000, h: 700 } }))[0];
-  assert.ok(vicino(e.x, 4.25) && vicino(e.w, 140) && vicino(e.y, 5) && vicino(e.h, 100));
+test('area "finito": limitata al foglio finito (rifilo escluso: 200 × 140)', () => {
+  const { stato, ids } = dueZone((i) => { soloImmagine(i); i.immagine.area = 'finito'; i.immagine.adatta = 'estendi'; });
+  const e = imm(G.generaFoglio(stato, img(ids, { w: 1000, h: 700 })))[0];
+  assert.ok(vicino(e.x, 5) && vicino(e.w, 200) && vicino(e.y, 4.25) && vicino(e.h, 140));
 });
 
 test('rotazione e dpi bassi: segnalati', () => {
-  const f = G.generaFoglio(dueFogli((i) => { i.foglio.immagini.alto.ruota = true; }), { alto: { w: 600, h: 420 } });
+  const { stato, ids } = dueZone((i) => { soloImmagine(i); i.immagine.ruota = true; });
+  const f = G.generaFoglio(stato, img(ids, { w: 600, h: 420 }));
   assert.equal(imm(f)[0].ruota, true);
   assert.ok(f.avvisi.some((a) => /dpi/.test(a)));
 });
 
-test('con immagini in entrambe le metà non compare l’avviso "nessuna riga"', () => {
-  const f = G.generaFoglio(dueFogli(), { alto: { w: 1740, h: 1218 }, basso: { w: 1740, h: 1218 } });
-  assert.ok(!f.avvisi.some((a) => /Nessuna riga/.test(a)), f.avvisi.join('|'));
+test('avviso sul bordo della stampante: conta solo la parte dell’immagine che resta dopo il rifilo', () => {
+  const { stato, ids } = dueZone((i) => { soloImmagine(i); i.immagine.adatta = 'estendi'; }, soloImmagine);
+  stato.stampa.sogliaAvviso = 4;
+  const f = G.generaFoglio(stato, img(ids, { w: 2030, h: 1450 }, { w: 2030, h: 1450 }));
+  assert.ok(!f.avvisi.some((a) => /bordo/.test(a)), f.avvisi.join('|'));
+  stato.stampa.sogliaAvviso = 6;
+  assert.ok(G.generaFoglio(stato, img(ids, { w: 2030, h: 1450 }, { w: 2030, h: 1450 })).avvisi.some((a) => /bordo/.test(a)));
 });
 
 test('opzioni immagine: valori non validi normalizzati; vecchi preset senza il campo', () => {
-  const s = M.normalizza({ layout: { tipo: 'zona', id: 'z1', impostazioni: { foglio: { immagini: { alto: { adatta: 'boh', area: 3, ruota: 'si' } } } } } });
-  assert.deepEqual(s.layout.impostazioni.foglio.immagini.alto, { adatta: 'contieni', area: 'aperto', ruota: false });
-  assert.deepEqual(s.layout.impostazioni.foglio.immagini.basso, { adatta: 'contieni', area: 'aperto', ruota: false });
+  const s = M.normalizza({ layout: { tipo: 'zona', id: 'z1', impostazioni: { motivo: 'immagine', immagine: { adatta: 'boh', area: 3, ruota: 'si' } } } });
+  assert.equal(s.layout.impostazioni.motivo, 'immagine');
+  assert.deepEqual(s.layout.impostazioni.immagine, { adatta: 'contieni', area: 'aperto', ruota: false });
+  const vecchio = M.normalizza({ layout: { tipo: 'zona', id: 'z1', impostazioni: { motivo: 'quadretti' } } });
+  assert.deepEqual(vecchio.layout.impostazioni.immagine, { adatta: 'contieni', area: 'aperto', ruota: false });
 });
 
-test('PDF: l’immagine è inserita nella posizione e nella misura calcolate', () => {
-  const f = G.generaFoglio(dueFogli(), { alto: { w: 60, h: 42 } });
-  const el = imm(f)[0];
+test('nome file automatico con motivo immagine', () => {
+  const s = M.creaStatoIniziale();
+  s.layout.impostazioni.motivo = 'immagine';
+  assert.equal(M.nomeFileAutomatico(s), 'foglio-A4-immagine.pdf');
+});
+
+test('PDF: l’immagine è inserita; senza dati viene saltata', () => {
+  const { stato, ids } = dueZone(soloImmagine, null);
+  const f = G.generaFoglio(stato, img(ids, { w: 60, h: 42 }));
   const copia = Object.assign({}, f, { elementi: f.elementi.map((e) => (e.tipo === 'immagine' ? Object.assign({}, e, { dati: 'data:image/png;base64,' + png(60, 42).toString('base64') }) : e)) });
-  const doc = P.creaPdf(jsPDF, copia, { titolo: 't' });
-  const testo = Buffer.from(doc.output('arraybuffer')).toString('latin1');
+  const testo = Buffer.from(P.creaPdf(jsPDF, copia, { titolo: 't' }).output('arraybuffer')).toString('latin1');
   assert.match(testo, /\/Subtype \/Image/);
   assert.match(testo, /\/Width 60/);
-  assert.ok(el.w > 0);
-  // senza "dati" l’immagine viene saltata senza errori
-  const senza = P.creaPdf(jsPDF, f, { titolo: 't' });
-  assert.ok(!Buffer.from(senza.output('arraybuffer')).toString('latin1').includes('/Subtype /Image'));
+  const senza = Buffer.from(P.creaPdf(jsPDF, f, { titolo: 't' }).output('arraybuffer')).toString('latin1');
+  assert.ok(!senza.includes('/Subtype /Image'));
 });

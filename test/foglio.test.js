@@ -18,8 +18,15 @@ function dueFogli(mod) {
   s.layout.spazio = 0;
   for (const z of L.foglie(s.layout)) {
     Object.assign(z.impostazioni, { motivo: 'puntini', passoX: 5, passoY: 5, passoUguale: false });
-    z.impostazioni.foglio.attivo = true;
-    z.impostazioni.foglio.piega.distanza = 5;
+    // geometria "verticale" del foglio aperto (145 × 203, piega orizzontale): i test sotto la verificano;
+    // la geometria predefinita (203 × 145, piega verticale) è provata nei test «A4 verticale».
+    Object.assign(z.impostazioni.foglio, {
+      attivo: true,
+      larghezza: 145,
+      altezza: 203,
+      rifilo: { sinistra: 2.5, destra: 2.5, alto: 1.5, basso: 1.5 },
+      piega: { modo: 'orizzontale', distanza: 5 }
+    });
     if (mod) mod(z.impostazioni);
   }
   return M.normalizza(s);
@@ -131,10 +138,10 @@ test('valori fuori intervallo e dati vecchi vengono normalizzati', () => {
   const fg = s.layout.impostazioni.foglio;
   assert.equal(fg.attivo, false);
   assert.ok(fg.larghezza >= 20);
-  assert.equal(fg.rifilo.sinistra, 2.5);
+  assert.equal(fg.rifilo.sinistra, 1.5);
   assert.ok(fg.rifilo.alto <= 100);
   assert.equal(fg.disegno, 'dentro');
-  assert.equal(fg.piega.modo, 'orizzontale');
+  assert.equal(fg.piega.modo, 'verticale');
   assert.ok(fg.piega.distanza >= 0);
   const vecchio = M.normalizza({ layout: { tipo: 'zona', id: 'z1', impostazioni: { motivo: 'quadretti' } } });
   assert.equal(vecchio.layout.impostazioni.foglio.attivo, false);
@@ -170,5 +177,93 @@ test('dividere una zona copia anche il foglio finito senza condividerlo', () => 
   a.impostazioni.foglio.attivo = true;
   a.impostazioni.foglio.rifilo.sinistra = 7;
   assert.equal(b.impostazioni.foglio.attivo, false);
-  assert.equal(b.impostazioni.foglio.rifilo.sinistra, 2.5);
+  assert.equal(b.impostazioni.foglio.rifilo.sinistra, 1.5);
+});
+
+
+// ---------------------------------------------------------------- A4 verticale: due zone sovrapposte, foglio aperto 203 × 145
+
+function a4Verticale(mod) {
+  const s = M.creaStatoIniziale();
+  s.pagina.formato = 'A4';
+  s.pagina.orientamento = 'verticale';
+  s.margini.senza = true;
+  s.stampa.sogliaAvviso = 0;
+  L.dividiZona(s, 'z1', 'orizzontale', { valore: 50, unita: '%' });
+  s.layout.spazio = 0;
+  for (const z of L.foglie(s.layout)) {
+    Object.assign(z.impostazioni, { motivo: 'puntini', passoX: 5, passoY: 5, passoUguale: false });
+    z.impostazioni.foglio.attivo = true; // misure predefinite: 203 × 145, piega verticale
+    if (mod) mod(z.impostazioni);
+  }
+  return M.normalizza(s);
+}
+
+test('A4 verticale: zone 210 × 148,5, foglio aperto 203 × 145 centrato, finito 200 × 140', () => {
+  const f = G.generaFoglio(a4Verticale());
+  assert.equal(f.errore, null);
+  const [z1, z2] = f.zone;
+  assert.ok(vicino(z1.rettangolo.w, 210) && vicino(z1.rettangolo.h, 148.5));
+  const a = z1.finito;
+  assert.deepEqual([a.aperto.w, a.aperto.h], [203, 145]);
+  assert.ok(vicino(a.aperto.x, 3.5) && vicino(a.aperto.y, 1.75));
+  assert.ok(vicino(a.finito.x, 5) && vicino(a.finito.y, 4.25) && vicino(a.finito.w, 200) && vicino(a.finito.h, 140));
+  assert.ok(vicino(z2.finito.aperto.y, 148.5 + 1.75));
+});
+
+test('A4 verticale: piega verticale al centro dei 203 mm (prima del rifilo)', () => {
+  const a = G.generaFoglio(a4Verticale()).zone[0].finito;
+  assert.ok(vicino(a.piega.x, a.aperto.x + 101.5));
+  assert.ok(vicino(a.piega.x0, a.piega.x1));
+  assert.ok(vicino(a.piega.y0, a.aperto.y) && vicino(a.piega.y1, a.aperto.y + 145));
+});
+
+test('A4 verticale: le colonne sono speculari rispetto alla piega; le righe sono uguali nelle due metà', () => {
+  for (const motivo of ['puntini', 'quadretti', 'righe-verticali', 'righe-orizzontali']) {
+    const f = G.generaFoglio(a4Verticale((i) => { i.motivo = motivo; i.foglio.distanza = { uguale: true, tutti: 0 }; }));
+    const piega = f.zone[0].finito.piega.x;
+    const punti = f.elementi
+      .filter((e) => e.tipo !== 'linee' || e.segmenti.length)
+      .flatMap((e) => (e.tipo === 'punti' ? e.centri : e.segmenti.flatMap((s) => [[s[0], s[1]], [s[2], s[3]]])))
+      .filter((c) => c[1] < 148.5);
+    const chiave = (a) => a.map((v) => v.toFixed(3)).join(',');
+    const set = new Set(punti.map(chiave));
+    const fin = f.zone[0].finito.finito;
+    let verificati = 0;
+    for (const [x, y] of punti) {
+      const xr = 2 * piega - x;
+      if (xr < fin.x - 1e-6 || xr > fin.x + fin.w + 1e-6) continue;
+      if (motivo === 'righe-orizzontali' && xr > piega - 5 && xr < piega + 5) continue;
+      assert.ok(set.has(chiave([xr, y])), motivo + ': manca il riflesso di ' + x + ',' + y);
+      verificati++;
+    }
+    assert.ok(verificati > 0, motivo);
+  }
+});
+
+test('A4 verticale: prima colonna a 5 mm dalla piega, nessun puntino più vicino; nessuno fuori dal finito', () => {
+  const f = G.generaFoglio(a4Verticale());
+  const z = f.zone[0].finito;
+  const xs = [...new Set(f.elementi.find((e) => e.tipo === 'punti').centri.map((c) => c[0]))].sort((a, b) => a - b);
+  assert.ok(xs.some((x) => vicino(x, z.piega.x + 5)) && xs.some((x) => vicino(x, z.piega.x - 5)));
+  assert.ok(!xs.some((x) => x > z.piega.x - 5 + 1e-6 && x < z.piega.x + 5 - 1e-6));
+  assert.ok(xs.every((x) => x >= z.finito.x - 1e-6 && x <= z.finito.x + z.finito.w + 1e-6));
+});
+
+test('A4 verticale: distanze dal bordo e rifilo per lato rispettano gli assi originali', () => {
+  const f = G.generaFoglio(a4Verticale((i) => {
+    i.foglio.rifilo = { sinistra: 5, destra: 0, alto: 3, basso: 0 };
+    i.foglio.distanza = { uguale: false, alto: 3, basso: 4, sinistra: 6, destra: 1 };
+  }));
+  const z = f.zone[0].finito;
+  assert.ok(vicino(z.finito.x, z.aperto.x + 5) && vicino(z.finito.y, z.aperto.y + 3));
+  // la piega è verticale: le colonne partono dalla piega (a sinistra e a destra restano almeno le distanze scelte),
+  // le righe partono dall'alto del foglio finito
+  assert.ok(vicino(z.distanze.alto, 3));
+  assert.ok(z.distanze.sinistra >= 6 - 1e-6 && z.distanze.destra >= 1 - 1e-6 && z.distanze.basso >= 4 - 1e-6);
+});
+
+test('A4 verticale: avvisi con le misure nell’ordine giusto', () => {
+  const f = G.generaFoglio(a4Verticale((i) => { i.foglio.larghezza = 300; }));
+  assert.ok(f.avvisi.some((a) => /\(300 × 145 mm\)/.test(a)), f.avvisi.join('|'));
 });

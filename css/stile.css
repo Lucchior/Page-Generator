@@ -955,3 +955,11 @@ select {
   stroke-dasharray: 6 4;
   vector-effect: non-scaling-stroke;
 }
+
+/* Icona del motivo «Immagine» */
+.mini-immagine {
+  background-image:
+    linear-gradient(135deg, transparent 0 55%, var(--mini-colore) 55% 100%),
+    radial-gradient(circle at 70% 30%, var(--mini-colore) 0 2px, transparent 2.5px);
+  border: 1px solid var(--mini-colore);
+}

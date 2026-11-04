@@ -64,14 +64,15 @@
   }
 
   // Modelli incorporati: non si possono eliminare né modificare, si caricano come un preset.
-  // «Due fogli 145 × 203 su A4»: A4 orizzontale senza margini, due zone da 148,5 mm senza spazio,
-  // ciascuna un foglio aperto 145 × 203 mm da rifilare (finito 140 × 200); la linea di divisione è stampata.
+  // «Due fogli 203 × 145 su A4»: A4 verticale senza margini diviso da una linea orizzontale in due zone da 148,5 mm;
+  // ogni zona è un foglio aperto 203 × 145 mm da piegare a metà (piega verticale) e rifilare (finito 200 × 140);
+  // la linea di divisione è stampata, per tagliare i due fogli.
   function modelloDueFogli() {
     const s = M.creaStatoIniziale();
     s.pagina.formato = 'A4';
-    s.pagina.orientamento = 'orizzontale';
+    s.pagina.orientamento = 'verticale';
     s.margini.senza = true;
-    L.dividiZona(s, s.layout.id, 'verticale', { valore: 50, unita: '%' });
+    L.dividiZona(s, s.layout.id, 'orizzontale', { valore: 50, unita: '%' });
     s.layout.spazio = 0;
     s.layout.linea.visibile = true;
     for (const z of L.foglie(s.layout)) z.impostazioni.foglio.attivo = true;
@@ -79,7 +80,7 @@
   }
 
   function modelli() {
-    return [{ nome: 'Due fogli 145 × 203 su A4', stato: modelloDueFogli() }];
+    return [{ nome: 'Due fogli 203 × 145 su A4', stato: modelloDueFogli() }];
   }
 
   // Archivio nel browser. Ogni operazione restituisce { ok:true, ... } oppure { ok:false, errore }.

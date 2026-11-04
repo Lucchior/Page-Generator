@@ -84,7 +84,7 @@
       const f = z.finito.finito;
       g.appendChild(nodo('rect', { class: 'bordo-finito', x: n(f.x), y: n(f.y), width: n(f.w), height: n(f.h) }));
       const p = z.finito.piega;
-      if (p) g.appendChild(nodo('line', { class: 'guida-piega', x1: n(p.x0), y1: n(p.y), x2: n(p.x1), y2: n(p.y) }));
+      if (p) g.appendChild(nodo('line', { class: 'guida-piega', x1: n(p.x0), y1: n(p.y0), x2: n(p.x1), y2: n(p.y1) }));
     }
     svg.appendChild(g);
   }

@@ -94,11 +94,11 @@
     if (immagine && immagine.anteprima) radice.URL.revokeObjectURL(immagine.anteprima);
   }
 
-  // Copia del foglio in cui ogni immagine ha il PNG già ritagliato (Riempi) e ruotato (180°) alla risoluzione piena.
+  // "caricate": immagini già lette, per id di zona. Copia del foglio in cui ogni immagine ha il PNG già ritagliato (Riempi) e ruotato (180°) alla risoluzione piena.
   function preparaPerPdf(foglio, caricate) {
     const elementi = foglio.elementi.map((el) => {
       if (el.tipo !== 'immagine') return el;
-      const src = caricate[el.lato];
+      const src = caricate[el.zona];
       if (!src) return Object.assign({}, el, { dati: null });
       const r = el.ritaglio;
       const sx = Math.round(src.w * r.x);

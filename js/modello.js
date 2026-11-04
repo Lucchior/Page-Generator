@@ -21,7 +21,7 @@
     'Half Letter': { larghezza: 139.7, altezza: 215.9 }
   };
 
-  const MOTIVI = ['puntini', 'righe-orizzontali', 'quadretti', 'righe-verticali', 'bianco'];
+  const MOTIVI = ['puntini', 'righe-orizzontali', 'quadretti', 'righe-verticali', 'bianco', 'immagine'];
   const MOTIVI_DUE_PASSI = ['puntini', 'quadretti'];
   const STILI_LINEA = ['continua', 'tratteggiata', 'puntini'];
 
@@ -50,28 +50,27 @@
   const LIMITE_PROFONDITA = 40;
   const LIMITE_NODI = 1000;
 
-  // Foglio finito di una zona (Fase 5): il foglio aperto (misura prima del rifilo) sta al centro
-  // della zona; il rifilo si toglie dopo la piegatura. Spento di default: la zona si comporta come prima.
-  //   disegno "dentro": linee e puntini si fermano dentro il foglio finito (a "distanza" dal bordo finito)
-  //   disegno "abbondanza": il reticolo continua anche nella parte che verrà tagliata
-  //   piega "orizzontale": al centro dell'altezza del foglio aperto; le due metà hanno il reticolo
-  //   speculare rispetto alla piega, a "distanza" mm da essa
-  // Immagine di una metà (Fase 6): le immagini stesse non fanno parte dello stato né dei preset.
-  //   adatta: contieni | riempi | estendi; area: aperto (con abbondanza) | finito; ruota: 180 gradi
+  // Zona con motivo "immagine" (Fase 6): l'immagine copre tutta la zona; il file non fa parte dello stato né dei preset.
+  //   adatta: contieni | riempi | estendi; area: aperto (foglio aperto, con abbondanza) | finito; ruota: 180 gradi
   function immaginePredefinita() {
     return { adatta: 'contieni', area: 'aperto', ruota: false };
   }
 
+  // Foglio finito di una zona (Fase 5): il foglio aperto (misura prima del rifilo) sta al centro
+  // della zona; il rifilo si toglie dopo la piegatura. Spento di default: la zona si comporta come prima.
+  //   disegno "dentro": linee e puntini si fermano dentro il foglio finito (a "distanza" dal bordo finito)
+  //   disegno "abbondanza": il reticolo continua anche nella parte che verrà tagliata
+  //   piega "verticale" (predefinita: foglio aperto 203 × 145): al centro della larghezza; "orizzontale": al centro
+  //   dell'altezza. Le due metà hanno il reticolo speculare rispetto alla piega, a "distanza" mm da essa
   function foglioFinitoPredefinito() {
     return {
       attivo: false,
-      larghezza: 145,
-      altezza: 203,
-      rifilo: { sinistra: 2.5, destra: 2.5, alto: 1.5, basso: 1.5 },
+      larghezza: 203,
+      altezza: 145,
+      rifilo: { sinistra: 1.5, destra: 1.5, alto: 2.5, basso: 2.5 },
       disegno: 'dentro',
       distanza: { uguale: true, tutti: 0, alto: 0, basso: 0, sinistra: 0, destra: 0 },
-      piega: { modo: 'orizzontale', distanza: 5 },
-      immagini: { alto: immaginePredefinita(), basso: immaginePredefinita() }
+      piega: { modo: 'verticale', distanza: 5 }
     };
   }
 
@@ -89,6 +88,7 @@
       formaPunto: 'tondo',
       dimPunto: 0.5,
       intensitaPunti: 60,
+      immagine: immaginePredefinita(),
       foglio: foglioFinitoPredefinito()
     };
   }
@@ -139,22 +139,22 @@
     return valore !== null && typeof valore === 'object' && !Array.isArray(valore) ? valore : {};
   }
 
+  function normalizzaImmagine(grezza) {
+    const o = oggetto(grezza);
+    const q = immaginePredefinita();
+    return {
+      adatta: scelta(o.adatta, ['contieni', 'riempi', 'estendi'], q.adatta),
+      area: scelta(o.area, ['aperto', 'finito'], q.area),
+      ruota: booleano(o.ruota, q.ruota)
+    };
+  }
+
   function normalizzaFoglioFinito(grezzo) {
     const p = foglioFinitoPredefinito();
     const g = oggetto(grezzo);
     const r = oggetto(g.rifilo);
     const d = oggetto(g.distanza);
     const pg = oggetto(g.piega);
-    const im = oggetto(g.immagini);
-    const normImmagine = (x) => {
-      const o = oggetto(x);
-      const q = immaginePredefinita();
-      return {
-        adatta: scelta(o.adatta, ['contieni', 'riempi', 'estendi'], q.adatta),
-        area: scelta(o.area, ['aperto', 'finito'], q.area),
-        ruota: booleano(o.ruota, q.ruota)
-      };
-    };
     return {
       attivo: booleano(g.attivo, p.attivo),
       larghezza: numero(g.larghezza, LIMITI.dimPagina, p.larghezza),
@@ -175,10 +175,9 @@
         destra: numero(d.destra, LIMITI.distanzaFoglio, p.distanza.destra)
       },
       piega: {
-        modo: scelta(pg.modo, ['orizzontale', 'nessuna'], p.piega.modo),
+        modo: scelta(pg.modo, ['verticale', 'orizzontale', 'nessuna'], p.piega.modo),
         distanza: numero(pg.distanza, LIMITI.distanzaPiega, p.piega.distanza)
-      },
-      immagini: { alto: normImmagine(im.alto), basso: normImmagine(im.basso) }
+      }
     };
   }
 
@@ -198,6 +197,7 @@
       formaPunto: scelta(g.formaPunto, ['tondo', 'quadrato'], p.formaPunto),
       dimPunto: numero(g.dimPunto, LIMITI.dimPunto, p.dimPunto),
       intensitaPunti: numero(g.intensitaPunti, LIMITI.intensita, p.intensitaPunti),
+      immagine: normalizzaImmagine(g.immagine),
       foglio: normalizzaFoglioFinito(g.foglio)
     };
   }
@@ -335,7 +335,7 @@
     if (zone > 1) return 'foglio-' + formato + '-' + zone + '-zone.pdf';
     const imp = stato.layout.impostazioni;
     let nome = 'foglio-' + formato + '-' + imp.motivo;
-    if (imp.motivo !== 'bianco') {
+    if (imp.motivo !== 'bianco' && imp.motivo !== 'immagine') {
       const p = passiEffettivi(imp);
       let passo;
       if (imp.motivo === 'righe-orizzontali') passo = formatta(p.y);

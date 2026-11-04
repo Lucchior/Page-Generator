@@ -33,17 +33,16 @@
   let direzioneClic = 'verticale';
   // «Vista finita»: nasconde lo scarto nell'anteprima (non cambia il PDF).
   let vistaFinita = false;
-  // Immagini caricate per le due metà della zona 1 (solo in memoria: non vanno nei preset né nel salvataggio).
-  const immagini = { alto: null, basso: null };
-  const NOMI_LATO = { alto: 'in alto', basso: 'in basso' };
+  // Immagini caricate, per id di zona (solo in memoria: non vanno nei preset né nel salvataggio automatico).
+  const immagini = {};
   const dimImmagini = () => {
     const d = {};
-    for (const lato of ['alto', 'basso']) if (immagini[lato]) d[lato] = { w: immagini[lato].w, h: immagini[lato].h };
+    for (const id of Object.keys(immagini)) d[id] = { w: immagini[id].w, h: immagini[id].h };
     return d;
   };
-  function togliImmagine(lato) {
-    IM.libera(immagini[lato]);
-    immagini[lato] = null;
+  function togliImmagine(id) {
+    IM.libera(immagini[id]);
+    delete immagini[id];
   }
   let casellaVista = null;
 
@@ -328,7 +327,7 @@
 
   const NOMI_MOTIVI = {
     'puntini': 'Puntini', 'righe-orizzontali': 'Righe orizzontali', 'quadretti': 'Quadretti',
-    'righe-verticali': 'Righe verticali', 'bianco': 'Bianco'
+    'righe-verticali': 'Righe verticali', 'bianco': 'Bianco', 'immagine': 'Immagine'
   };
 
   function creaPulsante(d, ctx) {
@@ -343,14 +342,13 @@
     return c;
   }
 
-  // Caricamento di un'immagine per una metà del foglio: scelta file, informazioni, rimozione.
-  function creaImmagineMeta(d, ctx) {
-    const lato = d.lato;
+  // Caricamento dell'immagine di una zona: scelta file, informazioni, rimozione.
+  function creaImmagineZona(d, ctx) {
+    const zona = ctx.id;
     const id = prossimoId();
     const nodo = el('div', 'campo campo-immagine');
-    nodo.appendChild(el('span', 'etichetta', 'Immagine ' + NOMI_LATO[lato]));
     const riga = el('div', 'gruppo-pulsanti due');
-    const bCarica = el('button', 'pulsante secondario', 'Carica PNG…');
+    const bCarica = el('button', 'pulsante secondario', 'Carica immagine');
     bCarica.type = 'button';
     const bRimuovi = el('button', 'pulsante secondario', 'Rimuovi');
     bRimuovi.type = 'button';
@@ -359,7 +357,7 @@
     file.accept = '.png,image/png';
     file.hidden = true;
     file.id = id;
-    file.setAttribute('aria-label', 'File PNG per l’immagine ' + NOMI_LATO[lato]);
+    file.setAttribute('aria-label', 'File PNG per l’immagine della zona');
     riga.append(bCarica, bRimuovi);
     const info = el('p', 'nota');
     const errore = el('p', 'messaggio errore');
@@ -369,21 +367,21 @@
     const c = base(d, nodo, ctx);
     descrivi(c, bCarica);
     c.sincronizza = function () {
-      const im = immagini[lato];
+      const im = immagini[zona];
       bRimuovi.hidden = !im;
-      bCarica.textContent = im ? 'Sostituisci…' : 'Carica PNG…';
+      bCarica.textContent = im ? 'Sostituisci immagine' : 'Carica immagine';
       if (!im) {
-        info.textContent = 'Nessuna immagine: la metà resta con la griglia.';
+        info.textContent = 'Nessuna immagine: la zona resta bianca finché non ne carichi una (PNG).';
         return;
       }
-      const dato = ultimo && ultimo.immagini ? ultimo.immagini.find((x) => x.lato === lato) : null;
+      const dato = ultimo && ultimo.immagini ? ultimo.immagini.find((x) => x.zona === zona) : null;
       info.textContent = im.nome + ' · ' + im.w + ' × ' + im.h + ' px' + (dato ? ' · circa ' + dato.dpi + ' dpi' : '');
     };
     bCarica.addEventListener('click', () => file.click());
     bRimuovi.addEventListener('click', () => {
-      togliImmagine(lato);
+      togliImmagine(zona);
       errore.hidden = true;
-      annuncia('Immagine ' + NOMI_LATO[lato] + ' rimossa.');
+      annuncia('Immagine rimossa.');
       cambiato();
     });
     file.addEventListener('change', () => {
@@ -393,9 +391,10 @@
       errore.hidden = true;
       IM.carica(f).then(
         (nuova) => {
-          togliImmagine(lato);
-          immagini[lato] = nuova;
-          annuncia('Immagine ' + NOMI_LATO[lato] + ' caricata.');
+          if (!L.trovaNodo(stato.layout, zona)) { IM.libera(nuova); return; }
+          togliImmagine(zona);
+          immagini[zona] = nuova;
+          annuncia('Immagine caricata.');
           cambiato();
         },
         (e) => {
@@ -431,7 +430,7 @@
       case 'casella': return creaCasella(d, ctx);
       case 'testo': return creaTesto(d, ctx);
       case 'pulsante': return creaPulsante(d, ctx);
-      case 'immagine': return creaImmagineMeta(d, ctx);
+      case 'immagine': return creaImmagineZona(d, ctx);
       default: return creaNota(d, ctx);
     }
   }
@@ -565,6 +564,7 @@
             ['righe-orizzontali', 'Righe orizzontali', 'mini-righe-o'],
             ['quadretti', 'Quadretti', 'mini-quadretti'],
             ['righe-verticali', 'Righe verticali', 'mini-righe-v'],
+            ['immagine', 'Immagine', 'mini-immagine'],
             ['bianco', 'Bianco', 'mini-bianco']
           ]
         }
@@ -572,7 +572,7 @@
     },
     {
       titolo: 'Passo',
-      visibile: (s, c) => motivoDi(c) !== 'bianco',
+      visibile: (s, c) => motivoDi(c) !== 'bianco' && motivoDi(c) !== 'immagine',
       campi: [
         {
           tipo: 'numero', percorso: 'zona.passoX', unita: 'mm', min: M.LIMITI.passo.min, max: M.LIMITI.passo.max, passo: 0.1,
@@ -646,15 +646,15 @@
         distanzaLato('destra', 'Distanza a destra'),
         {
           tipo: 'radio', percorso: 'zona.foglio.piega.modo', etichetta: 'Piega', visibile: fgAttivo,
-          opzioni: [['orizzontale', 'Orizzontale, al centro'], ['nessuna', 'Nessuna']],
-          nota: (s, c) => (fgDi(c).piega.modo === 'orizzontale'
-            ? 'Al centro dell’altezza del foglio aperto (prima del rifilo). Le due metà hanno la griglia speculare rispetto alla piega. La piega si vede solo nell’anteprima.'
-            : '')
+          opzioni: [['verticale', 'Verticale, al centro della larghezza'], ['orizzontale', 'Orizzontale, al centro dell’altezza'], ['nessuna', 'Nessuna']],
+          nota: (s, c) => (fgDi(c).piega.modo === 'nessuna'
+            ? ''
+            : 'Al centro ' + (fgDi(c).piega.modo === 'verticale' ? 'della larghezza' : 'dell’altezza') + ' del foglio aperto (prima del rifilo). Le due metà hanno la griglia speculare rispetto alla piega. La piega si vede solo nell’anteprima.')
         },
         {
-          tipo: 'numero', percorso: 'zona.foglio.piega.distanza', etichetta: 'Distanza della prima riga dalla piega', unita: 'mm', soloNumero: true,
+          tipo: 'numero', percorso: 'zona.foglio.piega.distanza', etichetta: 'Distanza della prima riga o colonna dalla piega', unita: 'mm', soloNumero: true,
           min: M.LIMITI.distanzaPiega.min, max: M.LIMITI.distanzaPiega.max, passo: 0.1,
-          visibile: (s, c) => fgAttivo(s, c) && fgDi(c).piega.modo === 'orizzontale'
+          visibile: (s, c) => fgAttivo(s, c) && fgDi(c).piega.modo !== 'nessuna'
         },
         { tipo: 'nota', testo: (s, c) => testoDistanze(c), visibile: fgAttivo },
         {
@@ -664,19 +664,17 @@
       ]
     },
     {
-      titolo: 'Prima e ultima pagina (immagini)',
-      visibile: (s, c) => c.id === L.primaFoglia(s.layout).id && fgAttivo(s, c) && fgDi(c).piega.modo === 'orizzontale',
+      titolo: 'Immagine',
+      visibile: motivoTra('immagine'),
       campi: [
-        { tipo: 'nota', testo: 'Una PNG per ciascuna metà del foglio aperto, sopra e sotto la piega. Nelle metà con immagine non c’è griglia. Le immagini non si salvano nei preset: dopo aver ricaricato la pagina vanno scelte di nuovo. Per 300 dpi servono circa 1713 × 1200 px per metà.' },
-        ...['alto', 'basso'].flatMap((lato) => {
-          const quando = () => !!immagini[lato];
-          return [
-            { tipo: 'immagine', lato },
-            { tipo: 'selezione', percorso: 'zona.foglio.immagini.' + lato + '.adatta', etichetta: 'Adattamento (immagine ' + NOMI_LATO[lato] + ')', visibile: quando, opzioni: [['contieni', 'Contieni (tutta visibile)'], ['riempi', 'Riempi (ritaglia l’eccesso)'], ['estendi', 'Estendi (deforma)']] },
-            { tipo: 'selezione', percorso: 'zona.foglio.immagini.' + lato + '.area', etichetta: 'Area (immagine ' + NOMI_LATO[lato] + ')', visibile: quando, opzioni: [['aperto', 'Foglio aperto (con abbondanza)'], ['finito', 'Solo foglio finito']] },
-            { tipo: 'casella', percorso: 'zona.foglio.immagini.' + lato + '.ruota', etichetta: 'Ruota di 180° (immagine ' + NOMI_LATO[lato] + ')', visibile: quando }
-          ];
-        })
+        { tipo: 'immagine' },
+        { tipo: 'nota', testo: 'L’immagine (PNG) copre tutta la zona. Per 300 dpi su un foglio aperto di 203 × 145 mm servono circa 2400 × 1700 px. Le immagini non si salvano nei preset: dopo aver ricaricato la pagina vanno scelte di nuovo; restano nel browser e non vengono inviate da nessuna parte (massimo 30 MB e 60 megapixel).' },
+        { tipo: 'selezione', percorso: 'zona.immagine.adatta', etichetta: 'Adattamento', opzioni: [['contieni', 'Contieni (tutta visibile)'], ['riempi', 'Riempi (ritaglia l’eccesso)'], ['estendi', 'Estendi (deforma)']] },
+        {
+          tipo: 'selezione', percorso: 'zona.immagine.area', etichetta: 'Area', visibile: fgAttivo,
+          opzioni: [['aperto', 'Foglio aperto (con abbondanza)'], ['finito', 'Solo foglio finito']]
+        },
+        { tipo: 'casella', percorso: 'zona.immagine.ruota', etichetta: 'Ruota di 180°' }
       ]
     },
     {
@@ -799,7 +797,7 @@
         {
           tipo: 'radio', percorso: 'margini.modo', etichetta: 'Posizione della griglia',
           opzioni: [['fisso', 'Fissa'], ['adatta', 'Adattata al passo']],
-          visibile: () => L.foglie(stato.layout).some((z) => z.impostazioni.motivo !== 'bianco'),
+          visibile: () => L.foglie(stato.layout).some((z) => z.impostazioni.motivo !== 'bianco' && z.impostazioni.motivo !== 'immagine'),
           nota: (s) => {
             const dove = piuZone() ? 'di ogni zona' : 'dell’area utile';
             return s.margini.modo === 'fisso'
@@ -1062,6 +1060,7 @@
       case 'quadretti': return c == null ? 'Quadretti.' : c + ' × ' + r + ' quadretti.';
       case 'righe-orizzontali': return r == null ? 'Righe orizzontali.' : (r + 1) + ' righe orizzontali.';
       case 'righe-verticali': return c == null ? 'Righe verticali.' : (c + 1) + ' righe verticali.';
+      case 'immagine': return 'Immagine.';
       default: return 'Foglio bianco.';
     }
   }
@@ -1071,8 +1070,9 @@
   }
 
   function rigenera() {
+    for (const id of Object.keys(immagini)) if (!L.trovaNodo(stato.layout, id)) togliImmagine(id); // zona eliminata
     const foglio = G.generaFoglio(stato, dimImmagini());
-    for (const el of foglio.elementi) if (el.tipo === 'immagine' && immagini[el.lato]) el.anteprima = immagini[el.lato].anteprima;
+    for (const el of foglio.elementi) if (el.tipo === 'immagine' && immagini[el.zona]) el.anteprima = immagini[el.zona].anteprima;
     ultimo = foglio;
     avvisiEl.replaceChildren();
     campoNome.placeholder = M.nomeFileAutomatico(stato);
@@ -1097,6 +1097,8 @@
     if (foglio.margineMinimo) didascalia += ' Distanza minima dal bordo: ' + M.formattaIt(foglio.margineMinimo.mm) + ' mm.';
     didascaliaEl.textContent = didascalia;
     for (const a of foglio.avvisi) aggiungiAvviso(a, 'attenzione');
+    // Gli avvisi cambiano l'altezza dello spazio disponibile: adatta l'anteprima di nuovo.
+    A.adatta(pianoEl, foglioEl, foglio);
   }
 
   // ------------------------------------------------------------ azioni
@@ -1314,9 +1316,8 @@
 
   // Sostituisce tutte le impostazioni (da preset, file o ripristino) e riparte con i blocchi nello stato iniziale.
   function applicaStato(nuovo) {
-    const avevaImmagini = !!(immagini.alto || immagini.basso);
-    togliImmagine('alto');
-    togliImmagine('basso');
+    const avevaImmagini = Object.keys(immagini).length > 0;
+    for (const id of Object.keys(immagini)) togliImmagine(id);
     if (avevaImmagini) annuncia('Le immagini sono state rimosse: vanno caricate di nuovo.');
     Object.assign(stato, nuovo);
     aperti.clear();

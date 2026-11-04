@@ -57,7 +57,7 @@
   // "budget" tiene il conto di quanti elementi restano per l'intero foglio (tutte le zone insieme).
   function generaZona(r, imp, adatta, budget) {
     const out = { elementi: [], estensione: null, colonne: 0, righe: 0, avvisi: [], errore: null };
-    if (imp.motivo === 'bianco' || r.w <= 0 || r.h <= 0) return out;
+    if (imp.motivo === 'bianco' || imp.motivo === 'immagine' || r.w <= 0 || r.h <= 0) return out;
     const resto = budget || { punti: MAX_PUNTI, segmenti: MAX_SEGMENTI };
 
     const passi = M.passiEffettivi(imp);
@@ -169,49 +169,10 @@
     return { vis: { x: area.x + (area.w - w) / 2, y: area.y + (area.h - h) / 2, w, h }, ritaglio: intero };
   }
 
-  // Immagini delle due metà del foglio aperto (sopra e sotto la piega). Restituisce { elementi, informazioni, avvisi }.
-  function generaImmagini(f, box, finito, foldY, dimensioni) {
-    const out = { elementi: [], informazioni: [], avvisi: [], lati: { alto: false, basso: false } };
-    if (foldY === null || !dimensioni) return out;
-    const meta = {
-      alto: { x: box.x, y: box.y, w: box.w, h: foldY - box.y },
-      basso: { x: box.x, y: foldY, w: box.w, h: box.y + box.h - foldY }
-    };
-    for (const lato of ['alto', 'basso']) {
-      const d = dimensioni[lato];
-      if (!d || !(d.w > 0) || !(d.h > 0)) continue;
-      const opz = f.immagini[lato];
-      let area = meta[lato];
-      if (opz.area === 'finito') {
-        const x0 = Math.max(area.x, finito.x);
-        const y0 = Math.max(area.y, finito.y);
-        const x1 = Math.min(area.x + area.w, finito.x + finito.w);
-        const y1 = Math.min(area.y + area.h, finito.y + finito.h);
-        area = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
-      }
-      if (area.w <= 0 || area.h <= 0) {
-        out.avvisi.push('Immagine ' + (lato === 'alto' ? 'in alto' : 'in basso') + ': nel foglio finito non resta spazio per l’immagine.');
-        continue;
-      }
-      out.lati[lato] = true;
-      const p = posizionaImmagine(area, d.w, d.h, opz.adatta);
-      const dpi = Math.min(
-        (d.w * p.ritaglio.w) / (p.vis.w / 25.4),
-        (d.h * p.ritaglio.h) / (p.vis.h / 25.4)
-      );
-      const vis = { x: arrotonda(p.vis.x), y: arrotonda(p.vis.y), w: arrotonda(p.vis.w), h: arrotonda(p.vis.h) };
-      out.elementi.push({ tipo: 'immagine', lato, x: vis.x, y: vis.y, w: vis.w, h: vis.h, ritaglio: p.ritaglio, ruota: !!opz.ruota, dpi: Math.round(dpi) });
-      out.informazioni.push({ lato, rettangolo: vis, dpi: Math.round(dpi) });
-      if (dpi < 300) {
-        out.avvisi.push('Immagine ' + (lato === 'alto' ? 'in alto' : 'in basso') + ': risoluzione di circa ' + Math.round(dpi) + ' dpi, sotto i 300 consigliati per la stampa.');
-      }
-    }
-    return out;
-  }
-
-  function generaZonaFinita(r, imp, budget, dimImmagini) {
+  // "trasposto": il calcolo è fatto con assi scambiati (piega verticale); serve solo ai testi degli avvisi.
+  function generaZonaFinitaInterna(r, imp, budget, trasposto) {
     const f = imp.foglio;
-    const out = { elementi: [], estensione: null, colonne: 0, righe: 0, avvisi: [], errore: null, foglio: null, immagini: [] };
+    const out = { elementi: [], estensione: null, colonne: 0, righe: 0, avvisi: [], errore: null, foglio: null };
     const W = f.larghezza;
     const H = f.altezza;
     const bx = r.x + (r.w - W) / 2;
@@ -223,7 +184,7 @@
     const dist = f.distanza.uguale
       ? { alto: f.distanza.tutti, basso: f.distanza.tutti, sinistra: f.distanza.tutti, destra: f.distanza.tutti }
       : f.distanza;
-    const foldY = f.piega.modo === 'orizzontale' ? by + H / 2 : null;
+    const foldY = f.piega.modo !== 'nessuna' ? by + H / 2 : null; // qui la piega è sempre orizzontale (con i vincoli di sopra gli assi sono già scambiati se serve)
     out.foglio = {
       aperto: { x: arrotonda(bx), y: arrotonda(by), w: W, h: H },
       finito: { x: arrotonda(fx), y: arrotonda(fy), w: arrotonda(fw), h: arrotonda(fh) },
@@ -231,17 +192,13 @@
       distanze: { alto: null, basso: null, sinistra: null, destra: null }
     };
     if (W > r.w + 1e-6 || H > r.h + 1e-6) {
-      out.avvisi.push('Il foglio aperto (' + M.formattaIt(W) + ' × ' + M.formattaIt(H) + ' mm) è più grande della zona: è centrato ed esce dai suoi bordi.');
+      const [mw, mh] = trasposto ? [H, W] : [W, H];
+      out.avvisi.push('Il foglio aperto (' + M.formattaIt(mw) + ' × ' + M.formattaIt(mh) + ' mm) è più grande della zona: è centrato ed esce dai suoi bordi.');
     }
     if (fw <= 0 || fh <= 0) {
       out.avvisi.push('Il rifilo è troppo grande: del foglio non resta nulla.');
       return out;
     }
-    // Le metà con immagine non hanno griglia.
-    const img = generaImmagini(f, { x: bx, y: by, w: W, h: H }, { x: fx, y: fy, w: fw, h: fh }, foldY, dimImmagini);
-    out.elementi.push(...img.elementi);
-    out.immagini = img.informazioni;
-    out.avvisi.push(...img.avvisi);
     const aX = fx + dist.sinistra;
     const aY = fy + dist.alto;
     const aW = fw - dist.sinistra - dist.destra;
@@ -250,7 +207,7 @@
       out.avvisi.push('Le distanze dal bordo sono troppo grandi: non resta spazio per la griglia.');
       return out;
     }
-    if (imp.motivo === 'bianco') return out;
+    if (imp.motivo === 'bianco' || imp.motivo === 'immagine') return out;
 
     const abb = f.disegno === 'abbondanza';
     const xLo = abb ? Math.max(bx, r.x) : aX;
@@ -271,8 +228,8 @@
       const dp = f.piega.distanza;
       const sSu = usaY ? posizioni(dp, passi.y, dp, foldY - yLo, false) : [];
       const sGiu = usaY ? posizioni(dp, passi.y, dp, yHi - foldY, false) : [];
-      if (foldY - dp > yLo && !img.lati.alto) meta.push({ ys: sSu.map((s) => foldY - s), da: yLo, a: foldY - dp });
-      if (yHi > foldY + dp && !img.lati.basso) meta.push({ ys: sGiu.map((s) => foldY + s), da: foldY + dp, a: yHi });
+      if (foldY - dp > yLo) meta.push({ ys: sSu.map((s) => foldY - s), da: yLo, a: foldY - dp });
+      if (yHi > foldY + dp) meta.push({ ys: sGiu.map((s) => foldY + s), da: foldY + dp, a: yHi });
     }
 
     const resto = budget || { punti: MAX_PUNTI, segmenti: MAX_SEGMENTI };
@@ -343,8 +300,104 @@
     }
     out.colonne = Math.max(0, xsIn.length - 1);
     out.righe = Math.max(0, new Set(ysIn.map(arrotonda)).size - 1);
-    if (usaX && xsIn.length === 0) out.avvisi.push('Nessuna colonna entra nel foglio finito con questo passo e queste distanze.');
-    if (usaY && ysIn.length === 0 && !(img.lati.alto && img.lati.basso)) out.avvisi.push('Nessuna riga entra nel foglio finito con questo passo e queste distanze.');
+    const [nomeX, nomeY] = trasposto ? ['riga', 'colonna'] : ['colonna', 'riga'];
+    if (usaX && xsIn.length === 0) out.avvisi.push('Nessuna ' + nomeX + ' entra nel foglio finito con questo passo e queste distanze.');
+    if (usaY && ysIn.length === 0) out.avvisi.push('Nessuna ' + nomeY + ' entra nel foglio finito con questo passo e queste distanze.');
+    return out;
+  }
+
+  const scambia = (r) => ({ x: r.y, y: r.x, w: r.h, h: r.w });
+
+  // Zona con foglio finito. Con la piega orizzontale si calcola direttamente; con la piega verticale
+  // (il caso normale: foglio aperto 203 × 145 piegato a metà nel senso della larghezza) si calcola con gli assi
+  // scambiati e poi si rimettono a posto coordinate, rettangoli e distanze.
+  function generaZonaFinita(r, imp, budget) {
+    const f = imp.foglio;
+    if (f.piega.modo !== 'verticale') {
+      const out = generaZonaFinitaInterna(r, imp, budget, false);
+      if (out.foglio && out.foglio.piega) {
+        const p = out.foglio.piega;
+        out.foglio.piega = { x0: p.x0, y0: p.y, x1: p.x1, y1: p.y, y: p.y };
+      }
+      return out;
+    }
+    const passi = M.passiEffettivi(imp);
+    const tImp = Object.assign({}, imp, {
+      passoX: passi.y,
+      passoY: passi.x,
+      passoUguale: false,
+      motivo: imp.motivo === 'righe-orizzontali' ? 'righe-verticali' : imp.motivo === 'righe-verticali' ? 'righe-orizzontali' : imp.motivo,
+      foglio: Object.assign({}, f, {
+        larghezza: f.altezza,
+        altezza: f.larghezza,
+        rifilo: { sinistra: f.rifilo.alto, destra: f.rifilo.basso, alto: f.rifilo.sinistra, basso: f.rifilo.destra },
+        distanza: {
+          uguale: f.distanza.uguale,
+          tutti: f.distanza.tutti,
+          alto: f.distanza.sinistra,
+          basso: f.distanza.destra,
+          sinistra: f.distanza.alto,
+          destra: f.distanza.basso
+        },
+        piega: { modo: 'orizzontale', distanza: f.piega.distanza }
+      })
+    });
+    const out = generaZonaFinitaInterna(scambia(r), tImp, budget, true);
+    for (const el of out.elementi) {
+      if (el.tipo === 'punti') el.centri = el.centri.map((c) => [c[1], c[0]]);
+      else if (el.tipo === 'linee') el.segmenti = el.segmenti.map((s) => [s[1], s[0], s[3], s[2]]);
+    }
+    if (out.estensione) {
+      const e = out.estensione;
+      out.estensione = { x0: e.y0, y0: e.x0, x1: e.y1, y1: e.x1 };
+    }
+    [out.colonne, out.righe] = [out.righe, out.colonne];
+    if (out.foglio) {
+      const g = out.foglio;
+      g.aperto = scambia(g.aperto);
+      g.finito = scambia(g.finito);
+      const d = g.distanze;
+      g.distanze = { alto: d.sinistra, basso: d.destra, sinistra: d.alto, destra: d.basso };
+      if (g.piega) {
+        const p = g.piega;
+        g.piega = { x0: p.y, y0: p.x0, x1: p.y, y1: p.x1, x: p.y };
+      }
+    }
+    return out;
+  }
+
+  // Immagine di una zona con motivo "immagine": copre tutta la zona (o il foglio aperto / finito, se attivo).
+  // "info" = { w, h } in pixel, oppure assente se l'immagine non è ancora stata caricata.
+  function generaImmagineZona(zona, g, info) {
+    const imp = zona.impostazioni;
+    const out = { elementi: [], informazioni: [], avvisi: [], estensione: null };
+    if (imp.motivo !== 'immagine' || !info || !(info.w > 0) || !(info.h > 0)) return out;
+    const opz = imp.immagine;
+    const finita = !!(g && g.foglio);
+    let area = zona.rettangolo;
+    let visibile = zona.rettangolo; // parte che resta dopo il rifilo
+    if (finita) {
+      area = opz.area === 'finito' ? g.foglio.finito : g.foglio.aperto;
+      visibile = g.foglio.finito;
+    }
+    if (area.w <= 0 || area.h <= 0) {
+      out.avvisi.push('Immagine: nel foglio finito non resta spazio per l’immagine.');
+      return out;
+    }
+    const p = posizionaImmagine(area, info.w, info.h, opz.adatta);
+    const dpi = Math.min((info.w * p.ritaglio.w) / (p.vis.w / 25.4), (info.h * p.ritaglio.h) / (p.vis.h / 25.4));
+    const vis = { x: arrotonda(p.vis.x), y: arrotonda(p.vis.y), w: arrotonda(p.vis.w), h: arrotonda(p.vis.h) };
+    out.elementi.push({ tipo: 'immagine', zona: zona.id, x: vis.x, y: vis.y, w: vis.w, h: vis.h, ritaglio: p.ritaglio, ruota: !!opz.ruota, dpi: Math.round(dpi) });
+    out.informazioni.push({ zona: zona.id, numero: zona.numero, rettangolo: vis, dpi: Math.round(dpi) });
+    if (dpi < 300) {
+      out.avvisi.push('Immagine: risoluzione di circa ' + Math.round(dpi) + ' dpi, sotto i 300 consigliati per la stampa.');
+    }
+    // Per l'avviso sul bordo della stampante conta solo la parte che resta dopo il rifilo.
+    const x0 = Math.max(vis.x, visibile.x);
+    const y0 = Math.max(vis.y, visibile.y);
+    const x1 = Math.min(vis.x + vis.w, visibile.x + visibile.w);
+    const y1 = Math.min(vis.y + vis.h, visibile.y + visibile.h);
+    if (x1 > x0 && y1 > y0) out.estensione = { x0, y0, x1, y1 };
     return out;
   }
 
@@ -467,17 +520,21 @@
     for (const z of ris.zone) {
       const finita = z.impostazioni.foglio && z.impostazioni.foglio.attivo;
       const g = finita
-        ? generaZonaFinita(z.rettangolo, z.impostazioni, resto, z.numero === 1 ? immagini : null)
+        ? generaZonaFinita(z.rettangolo, z.impostazioni, resto)
         : generaZona(z.rettangolo, z.impostazioni, stato.margini.modo === 'adatta', resto);
       z.finito = g.foglio || null;
       haFinito = haFinito || !!finita;
-      soloZone = unisci(soloZone, g.estensione);
       if (g.errore) {
         foglio.errore = g.errore;
         return foglio;
       }
       foglio.elementi.push(...g.elementi);
-      if (g.immagini) foglio.immagini.push(...g.immagini);
+      const im = generaImmagineZona(z, g, immagini && immagini[z.id]);
+      foglio.elementi.push(...im.elementi);
+      foglio.immagini.push(...im.informazioni);
+      for (const a of im.avvisi) foglio.avvisi.push(molte ? 'Zona ' + z.numero + ': ' + a : a);
+      g.estensione = unisci(g.estensione, im.estensione);
+      soloZone = unisci(soloZone, g.estensione);
       foglio.estensione = unisci(foglio.estensione, g.estensione);
       for (const a of g.avvisi) foglio.avvisi.push(molte ? 'Zona ' + z.numero + ': ' + a : a);
       if (!molte) {
